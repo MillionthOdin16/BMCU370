@@ -332,7 +332,17 @@ void BambuBus_init()
     crc_8.reset(0x39, 0x66, 0, false, false);
     crc_16.reset(0x1021, 0x913D, 0, false, false);
 
-    if (!_init_ready)
+    if (_init_ready)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            channel_colors[i][0] = data_save.filament[i].color_R;
+            channel_colors[i][1] = data_save.filament[i].color_G;
+            channel_colors[i][2] = data_save.filament[i].color_B;
+            channel_colors[i][3] = data_save.filament[i].color_A;
+        }
+    }
+    else
     {
         data_save.filament[0].color_R = 0xFF;
         data_save.filament[0].color_G = 0x00;
