@@ -1,13 +1,18 @@
 # BMCU370
-BMCU星尘修改版最新（BMCU-C V0.1-0020）源码，原项目链接：[Xing-C/BMCU370x](https://github.com/Xing-C/BMCU370x)。有一些个人小优化。
+BMCU星尘修改版最新（BMCU-C 370霍尔版 V0.1-0020）源码，原项目链接：[Xing-C/BMCU370x](https://github.com/Xing-C/BMCU370x)。有一些个人小优化。
 
-BMCU Xing-C Modified Version Latest (BMCU-C V0.1-0020) source code. Includes some minor personal optimizations.
+BMCU Xing-C modified version latest (BMCU-C Hall V0.1-0020) source code. Includes some minor personal optimizations.
+
+
+# 链接
+- english wiki: https://wiki.yuekai.fr/
+- 中文wiki：https://bmcu.wanzii.cn/
 
 
 # 更新日志
 从群文件里拷贝来的
 
-25-7月17日-0020；
+### 25-7月17日-0020；
 修复灯光逻辑错误，导致一些状态不亮灯。
 修复通道意外上线
 修正防掉线，之前并未生效
@@ -15,7 +20,7 @@ BMCU Xing-C Modified Version Latest (BMCU-C V0.1-0020) source code. Includes som
 当通道错误时，每隔3秒尝试更新一次红色，避免BMCU进入工作状态后插入的通道不亮灯。
 
 
-25-7月6日-0019修改版；
+### 25-7月6日-0019修改版；
 双微动霍尔版本也可用。
 
 首先 是0019原版对于0013原版的改变；
