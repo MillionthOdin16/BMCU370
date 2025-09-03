@@ -1,50 +1,64 @@
 #include "BambuBus.h"
 #include "CRC16.h"
 #include "CRC8.h"
+#include "config.h"
 CRC16 crc_16;
 CRC8 crc_8;
 
 uint8_t BambuBus_data_buf[1000];
 int BambuBus_have_data = 0;
 uint16_t BambuBus_address = 0;
-uint8_t BambuBus_AMS_num = 0; // 0~3 代表被识别为 A B C D
-uint8_t AMS_humidity_wet = 12; // 0~100(百分比湿度)
+uint8_t BambuBus_AMS_num = 0; // 0~3 represents identification as A B C D
+uint8_t AMS_humidity_wet = DEFAULT_HUMIDITY_WET; // 0~100 (humidity percentage)
 
+/**
+ * Filament structure definition
+ * Contains all information about a single filament channel
+ */
 struct _filament
 {
-    // AMS statu
-    char ID[8] = "GFG00";
-    uint8_t color_R = 0xFF;
-    uint8_t color_G = 0xFF;
-    uint8_t color_B = 0xFF;
-    uint8_t color_A = 0xFF;
-    int16_t temperature_min = 220;
-    int16_t temperature_max = 240;
-    char name[20] = "PETG";
+    // AMS status information
+    char ID[8] = DEFAULT_FILAMENT_ID;           ///< Filament identification string
+    uint8_t color_R = DEFAULT_COLOR_R;          ///< Red color component
+    uint8_t color_G = DEFAULT_COLOR_G;          ///< Green color component  
+    uint8_t color_B = DEFAULT_COLOR_B;          ///< Blue color component
+    uint8_t color_A = DEFAULT_COLOR_A;          ///< Alpha (transparency) component
+    int16_t temperature_min = DEFAULT_TEMP_MIN; ///< Minimum extrusion temperature
+    int16_t temperature_max = DEFAULT_TEMP_MAX; ///< Maximum extrusion temperature
+    char name[20] = DEFAULT_FILAMENT_NAME;      ///< Filament material name
 
-    float meters = 0;
-    uint64_t meters_virtual_count = 0;
-    AMS_filament_stu statu = AMS_filament_stu::online;
-    // printer_set
-    AMS_filament_motion motion_set = AMS_filament_motion::idle;
-    uint16_t pressure = 0xFFFF;
+    // Measurement and status
+    float meters = 0;                           ///< Remaining filament length in meters
+    uint64_t meters_virtual_count = 0;          ///< Virtual meter counter for tracking
+    AMS_filament_stu statu = AMS_filament_stu::online; ///< Current filament status
+    
+    // Motion control
+    AMS_filament_motion motion_set = AMS_filament_motion::idle; ///< Motion command
+    uint16_t pressure = 0xFFFF;                 ///< Pressure sensor reading
 };
 
-#define use_flash_addr ((uint32_t)0x0800F000)
-
+/**
+ * Flash memory structure for persistent storage
+ * Aligned to 4-byte boundary for flash memory efficiency
+ */
 struct alignas(4) flash_save_struct
 {
-    _filament filament[4];
-    int BambuBus_now_filament_num = 0xFF;
-    uint8_t filament_use_flag = 0x00;
-    uint32_t version = Bambubus_version;
-    uint32_t check = 0x40614061;
+    _filament filament[MAX_FILAMENT_CHANNELS];  ///< Filament data for all channels
+    int BambuBus_now_filament_num = 0xFF;       ///< Currently active filament number
+    uint8_t filament_use_flag = 0x00;           ///< Filament usage flags
+    uint32_t version = BAMBU_BUS_VERSION;       ///< Data structure version
+    uint32_t check = FLASH_MAGIC_NUMBER;        ///< Magic number for data validation
 } data_save;
 
+/**
+ * Read configuration data from flash memory
+ * @return true if valid data was found and loaded, false otherwise
+ */
 bool Bambubus_read()
 {
-    flash_save_struct *ptr = (flash_save_struct *)(use_flash_addr);
-    if ((ptr->check == 0x40614061) && (ptr->version == Bambubus_version))
+    const flash_save_struct *ptr = (const flash_save_struct *)(FLASH_SAVE_ADDRESS);
+    
+    if ((ptr->check == FLASH_MAGIC_NUMBER) && (ptr->version == BAMBU_BUS_VERSION))
     {
         memcpy(&data_save, ptr, sizeof(data_save));
         return true;
@@ -58,7 +72,7 @@ void Bambubus_set_need_to_save()
 }
 void Bambubus_save()
 {
-    Flash_saves(&data_save, sizeof(data_save), use_flash_addr);
+    Flash_saves(&data_save, sizeof(data_save), FLASH_SAVE_ADDRESS);
 }
 
 int get_now_filament_num()

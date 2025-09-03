@@ -1,42 +1,60 @@
 #include "Motion_control.h"
+#include "config.h"
 
 AS5600_soft_IIC_many MC_AS5600;
-uint32_t AS5600_SCL[] = {PB15, PB14, PB13, PB12};
-uint32_t AS5600_SDA[] = {PD0, PC15, PC14, PC13};
-#define AS5600_PI 3.1415926535897932384626433832795
-#define speed_filter_k 100
-float speed_as5600[4] = {0, 0, 0, 0};
 
+// AS5600 Hall sensor I2C pin configurations (defined in config.h)
+// Note: Removing const to match function signature requirements
+uint32_t AS5600_SCL[] = AS5600_SCL_PINS;
+uint32_t AS5600_SDA[] = AS5600_SDA_PINS;
+
+// Speed calculation and filtering
+float speed_as5600[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
+
+/**
+ * Initialize motion control pull-online detection system
+ */
 void MC_PULL_ONLINE_init()
 {
     ADC_DMA_init();
 }
-float MC_PULL_stu_raw[4] = {0, 0, 0, 0};
-int MC_PULL_stu[4] = {0, 0, 0, 0};
-float MC_ONLINE_key_stu_raw[4] = {0, 0, 0, 0};
-// 0-离线 1-在线双微动触发 2-外触发 3-内触发
-int MC_ONLINE_key_stu[4] = {0, 0, 0, 0};
 
-// 电压控制相关常量
-float PULL_voltage_up = 1.85f;   // 状态 压力高 红灯
-float PULL_voltage_down = 1.45f; // 状态 压力低 蓝灯
-#define PULL_VOLTAGE_SEND_MAX 1.7f
-// 微动触发控制相关常量
-bool Assist_send_filament[4] = {false, false, false, false};
-bool pull_state_old = false; // 上次触发状态——True：未触发，False：进料完成
-bool is_backing_out = false;
-uint64_t Assist_filament_time[4] = {0, 0, 0, 0};
-uint64_t Assist_send_time = 1200; // 仅触发外侧后，送料时长
-// 退料距离 单位 MM
-float_t P1X_OUT_filament_meters = 200.0f; // 内置200mm 外置700mm
-float_t last_total_distance[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // 初始化退料开始时的距离
-// bool filament_channel_inserted[4]={false,false,false,false};//通道是否插入
-// 使用双微动
-#define is_two false
+// Motion control state variables
+float MC_PULL_stu_raw[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};      ///< Raw pull sensor readings
+int MC_PULL_stu[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};            ///< Processed pull status
+float MC_ONLINE_key_stu_raw[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Raw online key sensor readings
 
+// Channel status: 0=offline, 1=both micro-switches triggered, 2=outer triggered, 3=inner triggered  
+int MC_ONLINE_key_stu[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
+
+// Voltage control constants (defined in config.h)
+const float PULL_voltage_up = PULL_VOLTAGE_HIGH;     ///< High pressure threshold - red LED
+const float PULL_voltage_down = PULL_VOLTAGE_LOW;    ///< Low pressure threshold - blue LED
+
+// Motion assist variables
+bool Assist_send_filament[MAX_FILAMENT_CHANNELS] = {false, false, false, false};
+bool pull_state_old = false; ///< Previous trigger state - True: not triggered, False: feeding complete
+bool is_backing_out = false;  ///< Currently backing out filament
+
+uint64_t Assist_filament_time[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
+const uint64_t Assist_send_time = ASSIST_SEND_TIME_MS; ///< Feed assist duration after outer trigger
+
+// Retraction distances (in millimeters) - defined in config.h
+const float_t P1X_OUT_filament_meters = P1X_OUT_FILAMENT_MM;        ///< Internal retraction distance
+const float_t P1X_OUT_filament_ext_meters = P1X_OUT_FILAMENT_EXT_MM; ///< External retraction distance
+float_t last_total_distance[MAX_FILAMENT_CHANNELS] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< Initial distance when retraction started
+
+// Dual micro-switch configuration
+const bool is_two = false; ///< Use dual micro-switches
+
+/**
+ * Read ADC values for all channels and update sensor states
+ */
 void MC_PULL_ONLINE_read()
 {
     float *data = ADC_DMA_get_value();
+    
+    // Map ADC channels to sensor readings (channels 3,2,1,0 in reverse order)
     MC_PULL_stu_raw[3] = data[0];
     MC_ONLINE_key_stu_raw[3] = data[1];
     MC_PULL_stu_raw[2] = data[2];
@@ -46,7 +64,8 @@ void MC_PULL_ONLINE_read()
     MC_PULL_stu_raw[0] = data[6];
     MC_ONLINE_key_stu_raw[0] = data[7];
 
-    for (int i = 0; i < 4; i++)
+    // Process sensor readings for each channel
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++)
     {
         /*
         if (i == 0){
@@ -988,7 +1007,7 @@ void MOTOR_init()
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
     GPIO_PinRemapConfig(GPIO_Remap_PD01, ENABLE);
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD, ENABLE);
-    MC_AS5600.init(AS5600_SCL, AS5600_SDA, 4);
+    MC_AS5600.init(AS5600_SCL, AS5600_SDA, MAX_FILAMENT_CHANNELS);
     // MOTOR_get_pwm_zero();
     // 自动方向
     MOTOR_get_dir();

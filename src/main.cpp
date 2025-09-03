@@ -5,63 +5,66 @@
 #include "Adafruit_NeoPixel.h"
 
 extern void debug_send_run();
-// 测试用 8灯珠
-// #define LED_PA11_NUM 8
-#define LED_PA11_NUM 2
-#define LED_PA8_NUM 2
-#define LED_PB1_NUM 2
-#define LED_PB0_NUM 2
-#define LED_PD1_NUM 1
 
-// 通道RGB对象，strip_channel[Chx]，0~4为PA11/PA8/PB1/PB0
-Adafruit_NeoPixel strip_channel[4] = {
+// RGB LED configuration - defined in config.h
+// Testing configuration: Use 8 LEDs by changing LED_PA11_NUM in config.h
+
+// RGB strip objects for channels and main board
+// Channel RGB objects: strip_channel[Chx], channels 0-3 correspond to PA11/PA8/PB1/PB0
+Adafruit_NeoPixel strip_channel[MAX_FILAMENT_CHANNELS] = {
     Adafruit_NeoPixel(LED_PA11_NUM, PA11, NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(LED_PA8_NUM, PA8, NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(LED_PB1_NUM, PB1, NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(LED_PB0_NUM, PB0, NEO_GRB + NEO_KHZ800)
 };
-// 主板 5050 RGB
+
+// Main board 5050 RGB LED
 Adafruit_NeoPixel strip_PD1(LED_PD1_NUM, PD1, NEO_GRB + NEO_KHZ800);
 
+/**
+ * Set RGB brightness for all LED strips
+ * Values range from 0-255, configured in config.h
+ */
 void RGB_Set_Brightness() {
-    // 亮度值 0-255
-    // 主板亮度
-    strip_PD1.setBrightness(35);
-    // 通道1 RGB
-    strip_channel[0].setBrightness(15);
-    // 通道2 RGB
-    strip_channel[1].setBrightness(15);
-    // 通道3 RGB
-    strip_channel[2].setBrightness(15);
-    // 通道4 RGB
-    strip_channel[3].setBrightness(15);
+    // Main board brightness
+    strip_PD1.setBrightness(BRIGHTNESS_MAIN_BOARD);
+    
+    // Set brightness for all channels
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        strip_channel[i].setBrightness(BRIGHTNESS_CHANNEL);
+    }
 }
 
+/**
+ * Initialize all RGB LED strips
+ */
 void RGB_init() {
     strip_PD1.begin();
-    strip_channel[0].begin();
-    strip_channel[1].begin();
-    strip_channel[2].begin();
-    strip_channel[3].begin();
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        strip_channel[i].begin();
+    }
 }
+
+/**
+ * Update all RGB LED strips with current data
+ */
 void RGB_show_data() {
     strip_PD1.show();
-    strip_channel[0].show();
-    strip_channel[1].show();
-    strip_channel[2].show();
-    strip_channel[3].show();
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        strip_channel[i].show();
+    }
 }
 
-// 存储4个通道的耗材丝RGB颜色
-uint8_t channel_colors[4][4] = {
-    {0xFF, 0xFF, 0xFF, 0xFF},
-    {0xFF, 0xFF, 0xFF, 0xFF},
-    {0xFF, 0xFF, 0xFF, 0xFF},
-    {0xFF, 0xFF, 0xFF, 0xFF}
+// Global variables for channel color storage
+uint8_t channel_colors[MAX_FILAMENT_CHANNELS][4] = {
+    {DEFAULT_COLOR_R, DEFAULT_COLOR_G, DEFAULT_COLOR_B, DEFAULT_COLOR_A},
+    {DEFAULT_COLOR_R, DEFAULT_COLOR_G, DEFAULT_COLOR_B, DEFAULT_COLOR_A},
+    {DEFAULT_COLOR_R, DEFAULT_COLOR_G, DEFAULT_COLOR_B, DEFAULT_COLOR_A},
+    {DEFAULT_COLOR_R, DEFAULT_COLOR_G, DEFAULT_COLOR_B, DEFAULT_COLOR_A}
 };
 
-// 存储4个通道的RGB颜色，避免频繁刷新颜色导致通讯失败
-uint8_t channel_runs_colors[4][2][3] = {
+// Runtime RGB color storage to avoid frequent color updates causing communication failures
+uint8_t channel_runs_colors[MAX_FILAMENT_CHANNELS][2][3] = {
     // R,G,B  ,, R,G,B
     {{1, 2, 3}, {1, 2, 3}}, // 通道1
     {{3, 2, 1}, {3, 2, 1}}, // 通道2
@@ -91,27 +94,48 @@ void setup()
     delay(1);
 }
 
+/**
+ * Set RGB color for a specific channel LED with bounds checking
+ * @param channel Channel number (0-3) 
+ * @param num LED index within the channel
+ * @param R Red component (0-255)
+ * @param G Green component (0-255)
+ * @param B Blue component (0-255)
+ * @return true if color was set successfully, false if parameters were invalid
+ */
 void Set_MC_RGB(uint8_t channel, int num, uint8_t R, uint8_t G, uint8_t B)
 {
-    int set_colors[3] = {R, G, B};
+    // Input validation - bounds checking
+    if (channel >= MAX_FILAMENT_CHANNELS) {
+        DEBUG_MY("ERROR: Invalid channel in Set_MC_RGB\n");
+        return;
+    }
+    
+    if (num < 0 || num >= 2) { // Each channel has max 2 LEDs (status and pull-online)
+        DEBUG_MY("ERROR: Invalid LED num in Set_MC_RGB\n");
+        return;
+    }
+    
+    const int set_colors[3] = {R, G, B};
     bool is_new_colors = false;
 
-    for (int colors = 0; colors < 3; colors++)
-    {
+    // Check if any color component has changed
+    for (int colors = 0; colors < 3; colors++) {
         if (channel_runs_colors[channel][num][colors] != set_colors[colors]) {
-            channel_runs_colors[channel][num][colors] = set_colors[colors]; // 记录新颜色
-            is_new_colors = true; // 颜色有更新
+            channel_runs_colors[channel][num][colors] = set_colors[colors]; // Record new color
+            is_new_colors = true; // Color has been updated
         }
     }
-    // 检查每个通道，如果有改变，更新它。
+    
+    // Update LED only if color has changed (reduces unnecessary updates)
     if (is_new_colors) {
         strip_channel[channel].setPixelColor(num, strip_channel[channel].Color(R, G, B));
-        strip_channel[channel].show(); // 显示新颜色
-        is_new_colors = false; // 重置状态
+        strip_channel[channel].show(); // Display new color
     }
 }
 
-bool MC_STU_ERROR[4] = {false, false, false, false};
+// Channel error status flags - initialize to no errors
+bool MC_STU_ERROR[MAX_FILAMENT_CHANNELS] = {false, false, false, false};
 void Show_SYS_RGB(int BambuBUS_status)
 {
     // 更新主板RGB灯
@@ -161,12 +185,13 @@ void loop()
                 // if (stu == BambuBus_package_type::heartbeat)
                 // {
                 // 正常工作-白色灯
-                // }
+                // Normal operation - white light
             }
-            // 每隔3秒刷新灯珠
+            
+            // Update RGB every 3 seconds (defined in config.h)
             static unsigned long last_sys_rgb_time = 0;
             unsigned long now = get_time64();
-            if (now - last_sys_rgb_time >= 3000) {
+            if (now - last_sys_rgb_time >= RGB_UPDATE_INTERVAL_MS) {
                 Show_SYS_RGB(error);
                 last_sys_rgb_time = now;
             }
