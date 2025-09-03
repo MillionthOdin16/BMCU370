@@ -36,6 +36,10 @@ The BMCU370 is a sophisticated multi-material 3D printing controller designed fo
 
 - **English Wiki**: https://wiki.yuekai.fr/
 - **中文Wiki**: https://bmcu.wanzii.cn/
+- **BambuBus Protocol Documentation**: [Bambu-Research-Group/Bambu-Bus](https://github.com/Bambu-Research-Group/Bambu-Bus)
+  - Comprehensive BambuBus protocol specifications and tools
+  - Packet parsing utilities and simulators
+  - Research data from the Bambu Research Group
 
 ## Building
 
@@ -104,8 +108,10 @@ Each filament channel supports:
 - Automatic filament detection and insertion assistance
 
 ### Communication Protocol
-- **BambuBus Protocol**: Custom UART-based communication with Bambu printers
-- **CRC Error Detection**: Built-in data integrity checking
+- **BambuBus Protocol**: Custom UART-based communication with Bambu printers (1,228,800 bps)
+- **Packet Formats**: Supports both long and short header packets with CRC verification
+- **Device Addressing**: Multi-device communication with specific address assignments
+- **CRC Error Detection**: Built-in data integrity checking using CRC8/CRC16
 - **Hot-swap Support**: Dynamic device detection and configuration
 
 ### Sensor Integration

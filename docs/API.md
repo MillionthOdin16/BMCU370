@@ -15,7 +15,91 @@ This document provides detailed API documentation for the BMCU370 firmware modul
 
 ## BambuBus Module
 
-The BambuBus module handles communication with Bambu Lab printers using a proprietary serial protocol.
+The BambuBus module handles communication with Bambu Lab printers using a proprietary serial protocol based on UART through RS485 bus.
+
+### Protocol Specifications
+
+The BambuBus protocol uses UART communication with the following parameters:
+- **Baud Rate**: 1,228,800 bps
+- **Data Bits**: 8
+- **Parity**: 1 even parity bit
+- **Stop Bits**: 1
+
+#### Packet Formats
+
+The protocol supports two packet formats for different communication scenarios:
+
+##### Long Header Packet Format
+
+Used for communication between multiple devices with full addressing:
+
+| Byte | Content | Description |
+|------|---------|-------------|
+| 0 | 0x3D | Start byte |
+| 1 | Flag | Less than 0x80 |
+| 2-3 | Sequence | Packet sequence number |
+| 4-5 | Length (L) | Total packet length |
+| 6 | CRC8 | Header integrity check |
+| 7-8 | Target | Target device address |
+| 9-10 | Source | Source device address |
+| 11-(L-3) | Data | Packet payload |
+| (L-2)-(L-1) | CRC16 | Data integrity check |
+
+##### Short Header Packet Format
+
+Used for preset master-slave communication:
+
+| Byte | Content | Description |
+|------|---------|-------------|
+| 0 | 0x3D | Start byte |
+| 1 | Flag+Seq | Flag and sequence (≥0x80) |
+| 2 | Length (L) | Total packet length |
+| 3 | CRC8 | Header integrity check |
+| 4 | Type | Packet type identifier |
+| 5-(L-3) | Data | Packet payload |
+| (L-2)-(L-1) | CRC16 | Data integrity check |
+
+#### CRC Algorithms
+
+**CRC8**: 
+- Polynomial: 0x39
+- Initial value: 0x66  
+- No XOR, no reverse
+
+**CRC16**:
+- Polynomial: 0x1021
+- Initial value: 0x913D
+- No XOR, no reverse
+- Low byte first in array
+
+#### Device Addressing
+
+The protocol uses specific addresses to identify different components:
+
+| Address | Device | Description |
+|---------|--------|-------------|
+| 0x03 | MC | Motion Controller |
+| 0x06 | AP | Upper Computer (X series) |
+| 0x07 | AMS | Automatic Material System |
+| 0x08 | TH | Tool Head |
+| 0x09 | AP2 | Upper Computer (P/A series) |
+| 0x0E | AHB | AMS Hub Board |
+| 0x0F | EXT | External Control Board |
+| 0x12 | AMS Lite | AMS Lite Device |
+| 0x13 | CTC | Color Touch Controller |
+
+#### Short Header Packet Types
+
+For AMS/AMS Lite communication:
+
+| Type | Purpose |
+|------|---------|
+| 0x03 | Read filament movement information |
+| 0x04 | Read/change AMS motion status |
+| 0x05 | Device online verification |
+| 0x06 | Unknown/Reserved |
+| 0x07 | Read NFC information |
+| 0x20 | Printer heartbeat packet |
 
 ### Data Structures
 
