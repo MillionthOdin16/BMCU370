@@ -126,13 +126,28 @@
 #define CHANNEL_ONLINE_INNER    3           ///< Channel online with inner switch only
 
 // =============================================================================
-// Motor Direction Correction
+// Motor Direction Detection and Correction
 // =============================================================================
 
 /**
- * Motor direction correction flags for each channel.
- * Set to true for channels that have reversed motor direction due to hardware differences.
- * This corrects for inconsistencies in AS5600 sensor mounting or gear orientations.
+ * Automatic Direction Learning Configuration
+ * 
+ * The system can automatically learn motor direction during normal filament feeding
+ * operations by correlating motor commands with actual movement detected by sensors.
+ * This eliminates the need for hardware disassembly and provides more accurate
+ * direction detection under real operating conditions.
+ */
+#define AUTO_DIRECTION_LEARNING_ENABLED    true     ///< Enable automatic direction learning during feeding
+#define AUTO_DIRECTION_MIN_SAMPLES         3        ///< Minimum samples needed to confirm direction
+#define AUTO_DIRECTION_MIN_MOVEMENT_MM     2.0f     ///< Minimum movement required for valid sample (mm)
+#define AUTO_DIRECTION_TIMEOUT_MS          5000     ///< Timeout for direction learning attempt (ms)
+
+/**
+ * Legacy Motor Direction Correction (Fallback)
+ * 
+ * Static correction flags used as fallback when automatic learning is disabled
+ * or fails. Set to true for channels that have reversed motor direction due to 
+ * hardware differences.
  * 
  * Based on reported issues:
  * - Channels 1 and 2 are commonly affected
@@ -140,10 +155,10 @@
  * 
  * Set to true to invert the auto-detected direction for that channel.
  */
-#define MOTOR_DIR_CORRECTION_CH0   false     ///< Channel 0 direction correction
-#define MOTOR_DIR_CORRECTION_CH1   true      ///< Channel 1 direction correction (commonly reversed)
-#define MOTOR_DIR_CORRECTION_CH2   true      ///< Channel 2 direction correction (commonly reversed)  
-#define MOTOR_DIR_CORRECTION_CH3   false     ///< Channel 3 direction correction
+#define MOTOR_DIR_CORRECTION_CH0   false     ///< Channel 0 direction correction (fallback)
+#define MOTOR_DIR_CORRECTION_CH1   true      ///< Channel 1 direction correction (fallback)
+#define MOTOR_DIR_CORRECTION_CH2   true      ///< Channel 2 direction correction (fallback)  
+#define MOTOR_DIR_CORRECTION_CH3   false     ///< Channel 3 direction correction (fallback)
 
 // =============================================================================
 // Timing Delays

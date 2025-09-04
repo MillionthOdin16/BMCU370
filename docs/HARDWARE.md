@@ -230,6 +230,45 @@ The firmware supports multiple hardware configurations through `config.h`:
 5. Test movement tracking accuracy
 6. **Confirm direction detection consistency between channels**
 
+### New: Automatic Motor Direction Detection
+
+**Version 2.1+ introduces automatic direction detection that eliminates the need for manual direction calibration and hardware disassembly.**
+
+#### How It Works
+The firmware now automatically learns correct motor direction during normal filament feeding operations by:
+
+1. **Triggering during filament loading**: When filament feed begins, the system starts learning mode
+2. **Correlating commands with movement**: Compares motor commands with actual AS5600 sensor readings
+3. **Collecting multiple samples**: Gathers at least 3 samples of 2mm+ movement for accuracy
+4. **Determining correct direction**: If commanded direction matches sensor movement, direction is correct; if opposite, it's inverted
+5. **Automatic saving**: Learned direction is permanently saved to flash memory
+
+#### Benefits Over Manual Calibration
+- ✅ **No hardware disassembly required** - Works during normal operation
+- ✅ **Eliminates magnet polarity guesswork** - Automatically adapts to any magnet orientation
+- ✅ **Real-world accuracy** - Uses actual filament loading conditions
+- ✅ **User-friendly** - Completely automatic with no user intervention
+- ✅ **Addresses root cause** - Compensates for inconsistent magnet polarity during assembly
+
+#### Configuration
+Enable in `config.h`:
+```c
+#define AUTO_DIRECTION_LEARNING_ENABLED    true     // Enable automatic learning (recommended)
+#define AUTO_DIRECTION_MIN_SAMPLES         3        // Samples needed for confidence
+#define AUTO_DIRECTION_MIN_MOVEMENT_MM     2.0f     // Minimum movement per sample
+```
+
+#### Assembly Impact
+With automatic direction detection enabled:
+- **Magnet polarity consistency is no longer critical** for motor direction
+- Quality control procedures can focus on mechanical alignment rather than polarity
+- Field issues with direction reversal are automatically resolved during first use
+- Legacy units with inconsistent magnet polarity are automatically corrected
+
+**Note**: While automatic detection solves direction issues, consistent magnet polarity is still recommended for optimal sensor performance and manufacturing quality.
+
+For detailed information, see [AUTOMATIC_DIRECTION_DETECTION.md](AUTOMATIC_DIRECTION_DETECTION.md).
+
 ### Troubleshooting Common Issues
 
 #### LEDs Not Working
