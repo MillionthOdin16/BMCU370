@@ -429,9 +429,13 @@ public:
                     if (device_type == BambuBus_AMS_lite)
                     {
                         if (MC_PULL_stu_raw[CHx] < PULL_VOLTAGE_SEND_MAX) // 压力主动到这个位置
+                        {
                             speed_set = 30;
+                        }
                         else
-                            speed_set = 0; // 原版这里是 10
+                        {
+                            speed_set = 10; // 原版这里是 10 - restored original working value
+                        }
                     }
                     else
                     {
@@ -1635,6 +1639,17 @@ void MOTOR_init()
         }
         MOTOR_CONTROL[index].dir = motor_dir;
     }
+    
+    // Debug: Print motor directions being initialized
+    DEBUG_MY("Motor directions set: CH0=");
+    DEBUG_MY(MOTOR_CONTROL[0].dir > 0 ? "+" : "-");
+    DEBUG_MY(" CH1=");  
+    DEBUG_MY(MOTOR_CONTROL[1].dir > 0 ? "+" : "-");
+    DEBUG_MY(" CH2=");
+    DEBUG_MY(MOTOR_CONTROL[2].dir > 0 ? "+" : "-");
+    DEBUG_MY(" CH3=");
+    DEBUG_MY(MOTOR_CONTROL[3].dir > 0 ? "+" : "-");
+    DEBUG_MY("\n");
     
     // Save any updated motor directions to flash
     Motion_control_save();
