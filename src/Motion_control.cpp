@@ -1655,6 +1655,10 @@ void MOTOR_init()
     { // 首次启动
         // set_motor_directions(1 , 1 , 1 , 1 ); // 1为正转 -1为反转
         // 如果自动检测+修正仍有问题，可取消注释上行并调整方向值
+        
+        // To reset all learned directions, uncomment the next line:
+        // reset_all_learned_directions(); // Clears all saved directions and forces relearning
+        
         first_boot = 0;
     }
     for (int index = 0; index < 4; index++)
@@ -1664,12 +1668,8 @@ void MOTOR_init()
         // Ensure motor direction is never zero to prevent complete motor failure
         int motor_dir = Motion_control_data_save.Motion_control_dir[index];
         if (motor_dir == 0) {
-            // If no direction is saved, use default direction based on channel
-            // Apply static corrections for known problematic channels
-            motor_dir = 1; // Default positive direction
-            if (index == 1 || index == 2) {
-                motor_dir = -1; // Channels 1 and 2 commonly need reversal
-            }
+            // If no direction is saved, use default direction for all channels
+            motor_dir = 1; // Default positive direction for ALL channels
             // Save the default direction for future use
             Motion_control_data_save.Motion_control_dir[index] = motor_dir;
             Motion_control_data_save.auto_learned[index] = false;
@@ -1696,7 +1696,7 @@ void MOTOR_init()
     {
         if (MOTOR_CONTROL[i].dir == 0) {
             // This should never happen after our fix, but add safety check
-            MOTOR_CONTROL[i].dir = (i == 1 || i == 2) ? -1 : 1;
+            MOTOR_CONTROL[i].dir = 1; // Use same default for all channels
             Motion_control_data_save.Motion_control_dir[i] = MOTOR_CONTROL[i].dir;
         }
     }
