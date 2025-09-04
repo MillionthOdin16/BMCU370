@@ -1,5 +1,6 @@
 #include "Motion_control.h"
 #include "config.h"
+#include <string.h>  // For memset, memcpy
 
 AS5600_soft_IIC_many MC_AS5600;
 
@@ -134,8 +135,28 @@ void MC_PULL_ONLINE_read()
 struct alignas(4) Motion_control_save_struct
 {
     int Motion_control_dir[4];
+    bool auto_learned[4];  ///< Whether direction was learned automatically vs static correction
     int check = 0x40614061;
 } Motion_control_data_save;
+
+// Automatic direction learning state
+struct DirectionLearningState
+{
+    bool learning_active;          ///< Currently learning direction for this channel
+    bool learning_complete;        ///< Direction learning completed successfully
+    uint64_t learning_start_time;  ///< When learning started (ms)
+    uint64_t last_sample_time;     ///< Last time a sample was taken (ms)
+    float initial_position;        ///< Initial filament position when learning started
+    float total_movement;          ///< Total measured movement during learning
+    float accumulated_noise;       ///< Accumulated sensor noise for validation
+    int command_direction;         ///< Direction commanded to motor (+1 or -1)
+    int sample_count;              ///< Number of valid direction samples collected
+    int positive_samples;          ///< Samples showing positive correlation
+    int negative_samples;          ///< Samples showing negative correlation
+    float confidence_score;        ///< Learning confidence (0.0-1.0)
+    bool has_valid_data;          ///< Whether any valid sensor data was received
+    int error_count;              ///< Number of invalid/noisy samples rejected
+} direction_learning[MAX_FILAMENT_CHANNELS];
 
 #define Motion_control_save_flash_addr ((uint32_t)0x0800E000)
 bool Motion_control_read()
@@ -518,6 +539,11 @@ void AS5600_distance_updata()//读取as5600，更新相关的数据
         // T = speed_filter_k / (T + speed_filter_k);
         speed_as5600[i] = speedx; // * (1 - T) + speed_as5600[i] * T; // mm/s
         add_filament_meters(i, distance_E / 1000);
+        
+        // Update automatic direction learning with movement data
+        if (AUTO_DIRECTION_LEARNING_ENABLED && fabs(distance_E) > 0.1) { // Only for significant movement
+            update_direction_learning(i, distance_E);
+        }
     }
     time_last = time_now;
 }
@@ -586,6 +612,13 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 MC_STU_RGB_set(num, 00, 255, 00);
                 filament_now_position[num] = filament_sending_out;
                 MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_send, 100);
+                
+                // Start automatic direction learning if enabled and needed
+                if (AUTO_DIRECTION_LEARNING_ENABLED && 
+                    (Motion_control_data_save.Motion_control_dir[num] == 0 || 
+                     !Motion_control_data_save.auto_learned[num])) {
+                    start_direction_learning(num, -1); // Feeding direction is typically negative
+                }
                 break;
             case AMS_filament_motion::need_pull_back:
                 pull_state_old = false; // 重置标记
@@ -883,9 +916,347 @@ void MOTOR_get_pwm_zero()
     }
 }
 // 将角度数值转化为角度差数值
+/**
+ * Initialize direction learning for a channel
+ * Called when filament feeding begins
+ */
+void start_direction_learning(int channel, int commanded_direction)
+{
+    if (!AUTO_DIRECTION_LEARNING_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    // Validate parameters
+    if (AUTO_DIRECTION_MIN_SAMPLES < 1 || AUTO_DIRECTION_MIN_SAMPLES > 50) {
+        return; // Invalid configuration
+    }
+    if (AUTO_DIRECTION_MIN_MOVEMENT_MM < 0.1f || AUTO_DIRECTION_MIN_MOVEMENT_MM > 20.0f) {
+        return; // Invalid configuration
+    }
+    if (AUTO_DIRECTION_CONFIDENCE_THRESHOLD < 0.5f || AUTO_DIRECTION_CONFIDENCE_THRESHOLD > 1.0f) {
+        return; // Invalid configuration
+    }
+    
+    // Only start learning if direction is unknown or was using static correction
+    if (Motion_control_data_save.Motion_control_dir[channel] != 0 && 
+        Motion_control_data_save.auto_learned[channel]) {
+        return; // Already have a good learned direction
+    }
+    
+    // Verify AS5600 sensor is online for this channel
+    if (!MC_AS5600.online[channel]) {
+        return; // Cannot learn without sensor
+    }
+    
+    DirectionLearningState& state = direction_learning[channel];
+    
+    // Initialize learning state
+    memset(&state, 0, sizeof(DirectionLearningState));
+    state.learning_active = true;
+    state.learning_complete = false;
+    state.learning_start_time = get_time64();
+    state.last_sample_time = state.learning_start_time;
+    state.initial_position = get_filament_meters(channel);
+    state.command_direction = commanded_direction;
+    state.confidence_score = 0.0f;
+    state.has_valid_data = false;
+    
+    #if AUTO_DIRECTION_DEBUG_ENABLED
+    DEBUG_MY("Starting direction learning for channel ");
+    DEBUG_int(channel);
+    DEBUG_MY(" with command direction ");
+    DEBUG_int(commanded_direction);
+    DEBUG_MY("\n");
+    #endif
+}
+
+/**
+ * Update direction learning with movement data
+ * Called during filament feeding operations
+ */
+void update_direction_learning(int channel, float movement_delta)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    DirectionLearningState& state = direction_learning[channel];
+    
+    if (!state.learning_active || state.learning_complete) {
+        return;
+    }
+    
+    uint64_t current_time = get_time64();
+    
+    // Check for timeout
+    if (current_time - state.learning_start_time > AUTO_DIRECTION_TIMEOUT_MS) {
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Direction learning timeout for channel ");
+        DEBUG_int(channel);
+        DEBUG_MY("\n");
+        #endif
+        state.learning_active = false;
+        return;
+    }
+    
+    // Validate movement delta for noise
+    float abs_movement = fabs(movement_delta);
+    if (abs_movement > AUTO_DIRECTION_MAX_NOISE_MM * 10) {
+        // Likely sensor error or mechanical issue
+        state.error_count++;
+        if (state.error_count > AUTO_DIRECTION_MIN_SAMPLES) {
+            // Too many errors, abort learning
+            state.learning_active = false;
+        }
+        return;
+    }
+    
+    // Mark that we have received some sensor data
+    if (abs_movement > 0.01f) {
+        state.has_valid_data = true;
+    }
+    
+    // Accumulate movement
+    state.total_movement += abs_movement;
+    state.accumulated_noise += (abs_movement < AUTO_DIRECTION_MAX_NOISE_MM) ? abs_movement : AUTO_DIRECTION_MAX_NOISE_MM;
+    
+    // Check if enough time has passed since last sample (prevent rapid sampling)
+    if (current_time - state.last_sample_time < AUTO_DIRECTION_SAMPLE_INTERVAL_MS) {
+        return;
+    }
+    
+    // Check if we have sufficient movement for a sample
+    if (state.total_movement >= AUTO_DIRECTION_MIN_MOVEMENT_MM) {
+        
+        // Validate sample quality based on noise ratio
+        float noise_ratio = state.accumulated_noise / state.total_movement;
+        if (noise_ratio > 0.3f) {
+            // Sample too noisy, reset and try again
+            state.total_movement = 0.0f;
+            state.accumulated_noise = 0.0f;
+            state.error_count++;
+            return;
+        }
+        
+        // Determine actual movement direction from sensor
+        int actual_direction = (movement_delta > 0) ? 1 : -1;
+        
+        // Compare with commanded direction
+        bool directions_match = (state.command_direction == actual_direction);
+        
+        state.sample_count++;
+        state.last_sample_time = current_time;
+        
+        if (directions_match) {
+            state.positive_samples++;
+        } else {
+            state.negative_samples++;
+        }
+        
+        // Calculate confidence score
+        int total_directional_samples = state.positive_samples + state.negative_samples;
+        if (total_directional_samples > 0) {
+            float max_samples = (float)max(state.positive_samples, state.negative_samples);
+            state.confidence_score = max_samples / (float)total_directional_samples;
+        }
+        
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Channel ");
+        DEBUG_int(channel);
+        DEBUG_MY(" sample ");
+        DEBUG_int(state.sample_count);
+        DEBUG_MY(": movement=");
+        DEBUG_float(movement_delta, 3);
+        DEBUG_MY(" commanded=");
+        DEBUG_int(state.command_direction);
+        DEBUG_MY(" actual=");
+        DEBUG_int(actual_direction);
+        DEBUG_MY(" match=");
+        DEBUG_MY(directions_match ? "Y" : "N");
+        DEBUG_MY(" confidence=");
+        DEBUG_float(state.confidence_score, 3);
+        DEBUG_MY("\n");
+        #endif
+        
+        // Reset movement accumulator for next sample
+        state.total_movement = 0.0f;
+        state.accumulated_noise = 0.0f;
+        
+        // Check if we have enough samples and sufficient confidence to make a decision
+        if (state.sample_count >= AUTO_DIRECTION_MIN_SAMPLES && 
+            state.confidence_score >= AUTO_DIRECTION_CONFIDENCE_THRESHOLD) {
+            complete_direction_learning(channel);
+        }
+    }
+}
+
+/**
+ * Complete direction learning and save results
+ */
+void complete_direction_learning(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    DirectionLearningState& state = direction_learning[channel];
+    
+    if (!state.learning_active || state.sample_count < AUTO_DIRECTION_MIN_SAMPLES) {
+        state.learning_active = false;
+        return;
+    }
+    
+    // Validate that we received meaningful sensor data
+    if (!state.has_valid_data) {
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Direction learning failed for channel ");
+        DEBUG_int(channel);
+        DEBUG_MY(": no valid sensor data\n");
+        #endif
+        state.learning_active = false;
+        return;
+    }
+    
+    // Require a minimum confidence level
+    if (state.confidence_score < AUTO_DIRECTION_CONFIDENCE_THRESHOLD) {
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Direction learning failed for channel ");
+        DEBUG_int(channel);
+        DEBUG_MY(": confidence too low: ");
+        DEBUG_float(state.confidence_score, 3);
+        DEBUG_MY("\n");
+        #endif
+        state.learning_active = false;
+        return;
+    }
+    
+    // Determine learned direction based on sample correlation
+    int learned_direction = 0;
+    if (state.positive_samples > state.negative_samples) {
+        // Commands and actual movement correlate positively
+        learned_direction = 1;
+    } else if (state.negative_samples > state.positive_samples) {
+        // Commands and actual movement are inverted
+        learned_direction = -1;
+    } else {
+        // Inconclusive results
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Direction learning inconclusive for channel ");
+        DEBUG_int(channel);
+        DEBUG_MY(": equal pos/neg samples\n");
+        #endif
+        state.learning_active = false;
+        return;
+    }
+    
+    if (learned_direction != 0) {
+        // Successfully learned direction
+        Motion_control_data_save.Motion_control_dir[channel] = learned_direction;
+        Motion_control_data_save.auto_learned[channel] = true;
+        MOTOR_CONTROL[channel].dir = learned_direction;
+        
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Direction learning completed for channel ");
+        DEBUG_int(channel);
+        DEBUG_MY(": direction=");
+        DEBUG_int(learned_direction);
+        DEBUG_MY(" confidence=");
+        DEBUG_float(state.confidence_score, 3);
+        DEBUG_MY(" samples=");
+        DEBUG_int(state.sample_count);
+        DEBUG_MY(" pos=");
+        DEBUG_int(state.positive_samples);
+        DEBUG_MY(" neg=");
+        DEBUG_int(state.negative_samples);
+        DEBUG_MY("\n");
+        #endif
+        
+        // Save to flash
+        Motion_control_save();
+        
+        state.learning_complete = true;
+    }
+    
+    state.learning_active = false;
+}
+
+/**
+ * Get direction learning status for diagnostics
+ * Returns learning state and progress for a channel
+ */
+bool get_direction_learning_status(int channel, float* confidence, int* samples, bool* complete)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return false;
+    }
+    
+    const DirectionLearningState& state = direction_learning[channel];
+    
+    if (confidence) *confidence = state.confidence_score;
+    if (samples) *samples = state.sample_count;
+    if (complete) *complete = state.learning_complete;
+    
+    return state.learning_active || state.learning_complete;
+}
+
+/**
+ * Reset direction learning state for a specific channel
+ * Useful for troubleshooting or when mechanical changes are made
+ */
+void reset_direction_learning(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    // Clear learning state
+    memset(&direction_learning[channel], 0, sizeof(DirectionLearningState));
+    
+    // Reset saved direction to unknown
+    Motion_control_data_save.Motion_control_dir[channel] = 0;
+    Motion_control_data_save.auto_learned[channel] = false;
+    
+    // Update motor control
+    MOTOR_CONTROL[channel].dir = 1; // Default to positive until learned
+    
+    // Save to flash
+    Motion_control_save();
+    
+    #if AUTO_DIRECTION_DEBUG_ENABLED
+    DEBUG_MY("Direction learning reset for channel ");
+    DEBUG_int(channel);
+    DEBUG_MY("\n");
+    #endif
+}
+
+/**
+ * Reset all learned directions - useful for complete recalibration
+ */
+void reset_all_learned_directions()
+{
+    for (int channel = 0; channel < MAX_FILAMENT_CHANNELS; channel++) {
+        // Clear learning state but don't save yet
+        memset(&direction_learning[channel], 0, sizeof(DirectionLearningState));
+        
+        // Reset saved direction to unknown
+        Motion_control_data_save.Motion_control_dir[channel] = 0;
+        Motion_control_data_save.auto_learned[channel] = false;
+        
+        // Update motor control
+        MOTOR_CONTROL[channel].dir = 1; // Default to positive until learned
+    }
+    
+    // Save all changes to flash at once
+    Motion_control_save();
+    
+    #if AUTO_DIRECTION_DEBUG_ENABLED
+    DEBUG_MY("All direction learning data reset\n");
+    #endif
+}
+
+// Convert angle difference, handling wraparound
 int M5600_angle_dis(int16_t angle1, int16_t angle2)
 {
-
     int cir_E = angle1 - angle2;
     if ((angle1 > 3072) && (angle2 <= 1024))
     {
@@ -898,7 +1269,7 @@ int M5600_angle_dis(int16_t angle1, int16_t angle2)
     return cir_E;
 }
 
-// 测试电机运动方向
+// 测试电机运动方向（启动时调用，现在作为自动学习的备用方案）
 void MOTOR_get_dir()
 {
     int dir[4] = {0, 0, 0, 0};
@@ -909,8 +1280,16 @@ void MOTOR_get_dir()
         for (int index = 0; index < 4; index++)
         {
             Motion_control_data_save.Motion_control_dir[index] = 0;
+            Motion_control_data_save.auto_learned[index] = false;
         }
     }
+    
+    // Initialize direction learning states
+    for (int index = 0; index < 4; index++)
+    {
+        memset(&direction_learning[index], 0, sizeof(DirectionLearningState)); // Properly initialize to zero
+    }
+    
     MC_AS5600.updata_angle(); //读取5600的初始角度值
 
     int16_t last_angle[4];
@@ -919,70 +1298,105 @@ void MOTOR_get_dir()
         last_angle[index] = MC_AS5600.raw_angle[index];                  //将初始角度值记录下来
         dir[index] = Motion_control_data_save.Motion_control_dir[index]; //记录flash中的dir数据
     }
-    //bool need_test = false; // 是否需要检测
-    bool need_save = false; // 是否需要更新状态
-    for (int index = 0; index < 4; index++)
-    {
-        if ((MC_AS5600.online[index] == true)) // 有5600，说明通道在线
-        {
-            if (Motion_control_data_save.Motion_control_dir[index] == 0) // 之前测试结果为0，需要测试
-            {
-                Motion_control_set_PWM(index, 1000); // 打开电机
-                //need_test = true;                    // 设置需要测试
-                need_save = true;                    // 有状态更新
+    
+    // If automatic learning is enabled, skip startup calibration for channels that don't have learned directions
+    bool need_startup_calibration = false;
+    if (AUTO_DIRECTION_LEARNING_ENABLED) {
+        for (int index = 0; index < 4; index++) {
+            if ((MC_AS5600.online[index] == true) && 
+                (Motion_control_data_save.Motion_control_dir[index] == 0 || 
+                 !Motion_control_data_save.auto_learned[index])) {
+                // This channel needs direction detection but will use automatic learning
+                // Set a temporary direction for now
+                dir[index] = 1; // Default positive direction, will be corrected during operation
             }
         }
-        else
-        {
-            dir[index] = 0;   // 通道不在线，清空它的方向数据
-            need_save = true; // 有状态更新
-        }
+    } else {
+        // Auto-learning disabled, perform traditional startup calibration
+        need_startup_calibration = true;
     }
-    int i = 0;
-    while (done == false)
-    {
-        done = true;
-
-        delay(10);                // 间隔10ms检测一次
-        MC_AS5600.updata_angle(); // 更新角度数据
-
-        if (i++ > 200) // 超过2s无响应
+    
+    bool need_save = false; // 是否需要更新状态
+    
+    if (need_startup_calibration) {
+        for (int index = 0; index < 4; index++)
         {
-            for (int index = 0; index < 4; index++)
+            if ((MC_AS5600.online[index] == true)) // 有5600，说明通道在线
             {
-                Motion_control_set_PWM(index, 0);                       // 停止
-                Motion_control_data_save.Motion_control_dir[index] = 0; // 方向设为0
-            }
-            break; // 跳出循环
-        }
-        for (int index = 0; index < 4; index++) // 遍历
-        {
-            if ((MC_AS5600.online[index] == true) && (Motion_control_data_save.Motion_control_dir[index] == 0)) // 对于新的通道
-            {
-                int angle_dis = M5600_angle_dis(MC_AS5600.raw_angle[index], last_angle[index]);
-                if (abs(angle_dis) > 163) // 移动超过1mm
+                if (Motion_control_data_save.Motion_control_dir[index] == 0) // 之前测试结果为0，需要测试
                 {
-                    Motion_control_set_PWM(index, 0); // 停止
-                    if (angle_dis > 0)                // 这里AS600正对着磁铁，和背贴方向是反的
+                    Motion_control_set_PWM(index, 1000); // 打开电机
+                    need_save = true;                    // 有状态更新
+                }
+            }
+            else
+            {
+                dir[index] = 0;   // 通道不在线，清空它的方向数据
+                need_save = true; // 有状态更新
+            }
+        }
+        
+        int i = 0;
+        while (done == false)
+        {
+            done = true;
+
+            delay(10);                // 间隔10ms检测一次
+            MC_AS5600.updata_angle(); // 更新角度数据
+
+            if (i++ > 200) // 超过2s无响应
+            {
+                for (int index = 0; index < 4; index++)
+                {
+                    Motion_control_set_PWM(index, 0);                       // 停止
+                    Motion_control_data_save.Motion_control_dir[index] = 0; // 方向设为0
+                }
+                break; // 跳出循环
+            }
+            for (int index = 0; index < 4; index++) // 遍历
+            {
+                if ((MC_AS5600.online[index] == true) && (Motion_control_data_save.Motion_control_dir[index] == 0)) // 对于新的通道
+                {
+                    int angle_dis = M5600_angle_dis(MC_AS5600.raw_angle[index], last_angle[index]);
+                    if (abs(angle_dis) > 163) // 移动超过1mm
                     {
-                        dir[index] = 1;
+                        Motion_control_set_PWM(index, 0); // 停止
+                        if (angle_dis > 0)                // 这里AS600正对着磁铁，和背贴方向是反的
+                        {
+                            dir[index] = 1;
+                        }
+                        else
+                        {
+                            dir[index] = -1;
+                        }
                     }
                     else
                     {
-                        dir[index] = -1;
+                        done = false; // 没有移动。继续等待
                     }
-                }
-                else
-                {
-                    done = false; // 没有移动。继续等待
                 }
             }
         }
+        
+        // Apply static motor direction corrections when auto-learning is disabled
+        static const bool motor_dir_correction[4] = {
+            MOTOR_DIR_CORRECTION_CH0,  // Channel 0
+            MOTOR_DIR_CORRECTION_CH1,  // Channel 1 (commonly reversed)
+            MOTOR_DIR_CORRECTION_CH2,  // Channel 2 (commonly reversed)
+            MOTOR_DIR_CORRECTION_CH3   // Channel 3 (sometimes reversed)
+        };
+        
+        for (int index = 0; index < 4; index++) // 遍历四个电机
+        {
+            // Apply direction correction if needed for this channel
+            if (motor_dir_correction[index] && dir[index] != 0) {
+                dir[index] = -dir[index]; // Invert the detected direction
+            }
+            Motion_control_data_save.Motion_control_dir[index] = dir[index]; // 数据复制
+            Motion_control_data_save.auto_learned[index] = false; // Mark as static correction
+        }
     }
-    for (int index = 0; index < 4; index++) // 遍历四个电机
-    {
-        Motion_control_data_save.Motion_control_dir[index] = dir[index]; // 数据复制
-    }
+    
     if (need_save) // 如果需要保存数据
     {
         Motion_control_save(); // 数据保存
@@ -1009,13 +1423,15 @@ void MOTOR_init()
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD, ENABLE);
     MC_AS5600.init(AS5600_SCL, AS5600_SDA, MAX_FILAMENT_CHANNELS);
     // MOTOR_get_pwm_zero();
-    // 自动方向
+    // 自动方向检测（包含硬件差异修正）
     MOTOR_get_dir();
 
-    // 固定电机方向用
+    // 固定电机方向用 - 仅在需要覆盖自动检测时使用
+    // 注意：现在自动检测已包含对通道1和2的方向修正
     if (first_boot == 1)
     { // 首次启动
         // set_motor_directions(1 , 1 , 1 , 1 ); // 1为正转 -1为反转
+        // 如果自动检测+修正仍有问题，可取消注释上行并调整方向值
         first_boot = 0;
     }
     for (int index = 0; index < 4; index++)

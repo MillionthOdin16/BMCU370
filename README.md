@@ -15,6 +15,7 @@ The BMCU370 is a sophisticated multi-material 3D printing controller designed fo
 - **Multi-channel filament management** (4 channels)
 - **Automatic Material System (AMS)** compatibility
 - **Hall sensor-based position feedback** using AS5600 sensors
+- **Automatic motor direction detection** during filament feeding operations
 - **RGB LED status indication** with NeoPixel strips
 - **BambuBus protocol communication** with printers
 - **Non-volatile storage** for filament profiles and settings
@@ -248,6 +249,11 @@ The workflow will:
 **Problem**: Filament not feeding properly
 - **Cause**: Hall sensor calibration or mechanical obstruction
 - **Solution**: Verify AS5600 sensor positions and clear filament path
+
+**Problem**: Motor direction reversed on channels 1 and 2 (and sometimes 3)
+- **Cause**: Inconsistent magnet polarity orientation during assembly affecting AS5600 Hall sensor readings
+- **Solution**: ✅ **Fixed in firmware v2.0.0+** - Automatic direction learning during normal filament loading
+- **Details**: See [Automatic Direction Detection Documentation](docs/AUTOMATIC_DIRECTION_DETECTION.md)
 
 **Problem**: Communication timeout with printer
 - **Cause**: BambuBus protocol error or cable issue

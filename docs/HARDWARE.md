@@ -74,6 +74,10 @@ USART2: Debug/Programming (115200 baud)
 - Magnet should be diametrically magnetized
 - 0.5-3mm air gap recommended
 - Ensure magnet is centered over sensor
+- **CRITICAL: Magnet polarity orientation must be consistent across all channels**
+  - Install all magnets with the same pole (North or South) facing the sensor
+  - Inconsistent magnet polarity will cause motor direction detection errors
+  - Mark magnets during assembly to ensure consistent orientation
 
 ### Pressure Sensors
 
@@ -143,6 +147,26 @@ USART2: Debug/Programming (115200 baud)
 - Sensors must be precisely aligned with rotating magnets
 - Use mounting brackets to maintain consistent air gap
 - Protect sensors from contamination and physical damage
+- **Ensure consistent magnet polarity orientation across all channels**
+
+### Magnet Assembly Guidelines
+**Critical for Motor Direction Detection:**
+
+1. **Polarity Marking**: Mark all magnets during manufacturing to indicate pole orientation
+2. **Consistent Installation**: Install all magnets with the same pole (North or South) facing the AS5600 sensor
+3. **Verification Procedure**: Use a compass or magnetic field detector to verify polarity before final assembly
+4. **Quality Control**: Include magnet polarity check in assembly verification steps
+
+**Magnet Specifications:**
+- Diametrically magnetized (not axially magnetized)
+- Neodymium N35 or stronger recommended  
+- Diameter appropriate for gear assembly
+- Thickness 2-4mm for optimal field strength
+
+**Assembly Notes:**
+- Random magnet orientation will cause motor direction detection errors
+- Inconsistent polarity is a primary cause of channels 1, 2, and 3 direction reversal
+- Proper magnet installation reduces need for software direction corrections
 
 ### LED Placement
 - Channel LEDs should be visible from front panel
@@ -201,8 +225,49 @@ The firmware supports multiple hardware configurations through `config.h`:
 #### Hall Sensor Calibration
 1. Verify sensor communication on each I2C channel
 2. Check magnet alignment and air gap
-3. Validate position readings through full rotation
-4. Test movement tracking accuracy
+3. **Verify magnet polarity consistency across all channels**
+4. Validate position readings through full rotation
+5. Test movement tracking accuracy
+6. **Confirm direction detection consistency between channels**
+
+### New: Automatic Motor Direction Detection
+
+**Version 2.1+ introduces automatic direction detection that eliminates the need for manual direction calibration and hardware disassembly.**
+
+#### How It Works
+The firmware now automatically learns correct motor direction during normal filament feeding operations by:
+
+1. **Triggering during filament loading**: When filament feed begins, the system starts learning mode
+2. **Correlating commands with movement**: Compares motor commands with actual AS5600 sensor readings
+3. **Collecting multiple samples**: Gathers at least 3 samples of 2mm+ movement for accuracy
+4. **Determining correct direction**: If commanded direction matches sensor movement, direction is correct; if opposite, it's inverted
+5. **Automatic saving**: Learned direction is permanently saved to flash memory
+
+#### Benefits Over Manual Calibration
+- ✅ **No hardware disassembly required** - Works during normal operation
+- ✅ **Eliminates magnet polarity guesswork** - Automatically adapts to any magnet orientation
+- ✅ **Real-world accuracy** - Uses actual filament loading conditions
+- ✅ **User-friendly** - Completely automatic with no user intervention
+- ✅ **Addresses root cause** - Compensates for inconsistent magnet polarity during assembly
+
+#### Configuration
+Enable in `config.h`:
+```c
+#define AUTO_DIRECTION_LEARNING_ENABLED    true     // Enable automatic learning (recommended)
+#define AUTO_DIRECTION_MIN_SAMPLES         3        // Samples needed for confidence
+#define AUTO_DIRECTION_MIN_MOVEMENT_MM     2.0f     // Minimum movement per sample
+```
+
+#### Assembly Impact
+With automatic direction detection enabled:
+- **Magnet polarity consistency is no longer critical** for motor direction
+- Quality control procedures can focus on mechanical alignment rather than polarity
+- Field issues with direction reversal are automatically resolved during first use
+- Legacy units with inconsistent magnet polarity are automatically corrected
+
+**Note**: While automatic detection solves direction issues, consistent magnet polarity is still recommended for optimal sensor performance and manufacturing quality.
+
+For detailed information, see [AUTOMATIC_DIRECTION_DETECTION.md](AUTOMATIC_DIRECTION_DETECTION.md).
 
 ### Troubleshooting Common Issues
 
