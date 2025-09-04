@@ -249,6 +249,11 @@ The workflow will:
 - **Cause**: Hall sensor calibration or mechanical obstruction
 - **Solution**: Verify AS5600 sensor positions and clear filament path
 
+**Problem**: Motor direction reversed on channels 1 and 2 (and sometimes 3)
+- **Cause**: Hardware differences in sensor mounting or gear orientations
+- **Solution**: ✅ **Fixed in firmware v2.0.0+** - Automatic direction correction is now applied
+- **Details**: See [Motor Direction Fix Documentation](docs/MOTOR_DIRECTION_FIX.md)
+
 **Problem**: Communication timeout with printer
 - **Cause**: BambuBus protocol error or cable issue
 - **Solution**: Check UART connections and baud rate settings (115200)

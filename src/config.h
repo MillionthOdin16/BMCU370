@@ -126,6 +126,26 @@
 #define CHANNEL_ONLINE_INNER    3           ///< Channel online with inner switch only
 
 // =============================================================================
+// Motor Direction Correction
+// =============================================================================
+
+/**
+ * Motor direction correction flags for each channel.
+ * Set to true for channels that have reversed motor direction due to hardware differences.
+ * This corrects for inconsistencies in AS5600 sensor mounting or gear orientations.
+ * 
+ * Based on reported issues:
+ * - Channels 1 and 2 are commonly affected
+ * - Some units may have channel 3 affected instead
+ * 
+ * Set to true to invert the auto-detected direction for that channel.
+ */
+#define MOTOR_DIR_CORRECTION_CH0   false     ///< Channel 0 direction correction
+#define MOTOR_DIR_CORRECTION_CH1   true      ///< Channel 1 direction correction (commonly reversed)
+#define MOTOR_DIR_CORRECTION_CH2   true      ///< Channel 2 direction correction (commonly reversed)  
+#define MOTOR_DIR_CORRECTION_CH3   false     ///< Channel 3 direction correction
+
+// =============================================================================
 // Timing Delays
 // =============================================================================
 

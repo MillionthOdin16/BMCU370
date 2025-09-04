@@ -979,8 +979,23 @@ void MOTOR_get_dir()
             }
         }
     }
+    
+    // Apply motor direction corrections for channels with hardware differences
+    // These corrections address known issues where channels 1 and 2 (and sometimes 3)
+    // have reversed direction due to different sensor mounting or gear orientations
+    static const bool motor_dir_correction[4] = {
+        MOTOR_DIR_CORRECTION_CH0,  // Channel 0
+        MOTOR_DIR_CORRECTION_CH1,  // Channel 1 (commonly reversed)
+        MOTOR_DIR_CORRECTION_CH2,  // Channel 2 (commonly reversed)
+        MOTOR_DIR_CORRECTION_CH3   // Channel 3 (sometimes reversed)
+    };
+    
     for (int index = 0; index < 4; index++) // 遍历四个电机
     {
+        // Apply direction correction if needed for this channel
+        if (motor_dir_correction[index] && dir[index] != 0) {
+            dir[index] = -dir[index]; // Invert the detected direction
+        }
         Motion_control_data_save.Motion_control_dir[index] = dir[index]; // 数据复制
     }
     if (need_save) // 如果需要保存数据
@@ -1009,13 +1024,15 @@ void MOTOR_init()
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD, ENABLE);
     MC_AS5600.init(AS5600_SCL, AS5600_SDA, MAX_FILAMENT_CHANNELS);
     // MOTOR_get_pwm_zero();
-    // 自动方向
+    // 自动方向检测（包含硬件差异修正）
     MOTOR_get_dir();
 
-    // 固定电机方向用
+    // 固定电机方向用 - 仅在需要覆盖自动检测时使用
+    // 注意：现在自动检测已包含对通道1和2的方向修正
     if (first_boot == 1)
     { // 首次启动
         // set_motor_directions(1 , 1 , 1 , 1 ); // 1为正转 -1为反转
+        // 如果自动检测+修正仍有问题，可取消注释上行并调整方向值
         first_boot = 0;
     }
     for (int index = 0; index < 4; index++)
