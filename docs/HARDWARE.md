@@ -74,6 +74,10 @@ USART2: Debug/Programming (115200 baud)
 - Magnet should be diametrically magnetized
 - 0.5-3mm air gap recommended
 - Ensure magnet is centered over sensor
+- **CRITICAL: Magnet polarity orientation must be consistent across all channels**
+  - Install all magnets with the same pole (North or South) facing the sensor
+  - Inconsistent magnet polarity will cause motor direction detection errors
+  - Mark magnets during assembly to ensure consistent orientation
 
 ### Pressure Sensors
 
@@ -143,6 +147,26 @@ USART2: Debug/Programming (115200 baud)
 - Sensors must be precisely aligned with rotating magnets
 - Use mounting brackets to maintain consistent air gap
 - Protect sensors from contamination and physical damage
+- **Ensure consistent magnet polarity orientation across all channels**
+
+### Magnet Assembly Guidelines
+**Critical for Motor Direction Detection:**
+
+1. **Polarity Marking**: Mark all magnets during manufacturing to indicate pole orientation
+2. **Consistent Installation**: Install all magnets with the same pole (North or South) facing the AS5600 sensor
+3. **Verification Procedure**: Use a compass or magnetic field detector to verify polarity before final assembly
+4. **Quality Control**: Include magnet polarity check in assembly verification steps
+
+**Magnet Specifications:**
+- Diametrically magnetized (not axially magnetized)
+- Neodymium N35 or stronger recommended  
+- Diameter appropriate for gear assembly
+- Thickness 2-4mm for optimal field strength
+
+**Assembly Notes:**
+- Random magnet orientation will cause motor direction detection errors
+- Inconsistent polarity is a primary cause of channels 1, 2, and 3 direction reversal
+- Proper magnet installation reduces need for software direction corrections
 
 ### LED Placement
 - Channel LEDs should be visible from front panel
@@ -201,8 +225,10 @@ The firmware supports multiple hardware configurations through `config.h`:
 #### Hall Sensor Calibration
 1. Verify sensor communication on each I2C channel
 2. Check magnet alignment and air gap
-3. Validate position readings through full rotation
-4. Test movement tracking accuracy
+3. **Verify magnet polarity consistency across all channels**
+4. Validate position readings through full rotation
+5. Test movement tracking accuracy
+6. **Confirm direction detection consistency between channels**
 
 ### Troubleshooting Common Issues
 

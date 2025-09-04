@@ -16,8 +16,19 @@ However, due to hardware variations between channels:
 - Different physical mounting orientations of AS5600 sensors
 - Inconsistent gear orientations across channels  
 - PCB layout differences
+- **Inconsistent magnet polarity orientation across channels**
 
 The direction interpretation can be incorrect for certain channels.
+
+### Magnet Polarity Impact
+
+**Critical Factor**: The AS5600 hall sensors rely on diametrically magnetized magnets, and the polarity orientation directly affects direction detection:
+
+- **Consistent Polarity**: When all magnets are installed with the same pole (North or South) facing the sensor, angle readings increase/decrease consistently for the same rotation direction across all channels
+- **Inconsistent Polarity**: When magnets are installed with different pole orientations, the same motor rotation direction will produce opposite angle changes on different channels
+- **Assembly Sensitivity**: Without specific polarity marking in assembly instructions, magnets may be installed randomly, causing unpredictable direction reversals
+
+This explains why the issue appears on certain channels (1, 2, and sometimes 3) but not others - it depends on how the magnets were oriented during assembly.
 
 ## Solution
 
@@ -103,6 +114,22 @@ The correction is applied:
 2. **Clear saved directions**: Reset flash memory to force re-detection
 3. **Use manual override**: Set directions explicitly using `set_motor_directions()`
 4. **Check wiring**: Ensure motor wires are connected correctly
+5. **Verify magnet polarity**: Ensure all magnets have consistent pole orientation
+
+### Magnet Polarity Verification
+If you suspect inconsistent magnet polarity is causing direction issues:
+
+1. **Visual Inspection**: If magnets are marked, verify all have the same pole facing the sensor
+2. **Magnetic Field Test**: Use a compass or magnetic field indicator to check polarity
+3. **Software Test**: Temporarily disable direction correction for all channels in `config.h`:
+   ```c
+   #define MOTOR_DIR_CORRECTION_CH0   false
+   #define MOTOR_DIR_CORRECTION_CH1   false  
+   #define MOTOR_DIR_CORRECTION_CH2   false
+   #define MOTOR_DIR_CORRECTION_CH3   false
+   ```
+4. **Individual Channel Testing**: Test each channel separately to identify which have reversed direction
+5. **Custom Correction**: Update correction flags to match your specific hardware configuration
 
 ### For Different Hardware Variants
 If you have a hardware variant with different affected channels:
@@ -110,6 +137,13 @@ If you have a hardware variant with different affected channels:
 2. Identify which channels are reversed
 3. Update the correction flags in `config.h` accordingly
 4. Rebuild and test
+
+### Hardware Assembly Recommendations
+For future assemblies to prevent direction issues:
+- **Mark magnet polarity** during manufacturing/assembly
+- **Use consistent installation procedure** for all channels
+- **Include polarity verification** in quality control testing
+- **Document magnet orientation** in assembly instructions
 
 ## Compatibility
 
