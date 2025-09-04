@@ -27,6 +27,7 @@ float MC_ONLINE_key_stu_raw[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Raw onli
 
 // Channel status: 0=offline, 1=both micro-switches triggered, 2=outer triggered, 3=inner triggered  
 int MC_ONLINE_key_stu[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
+int MC_ONLINE_key_stu_prev[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Previous presence sensor state for edge detection
 
 // Voltage control constants (defined in config.h)
 const float PULL_voltage_up = PULL_VOLTAGE_HIGH;     ///< High pressure threshold - red LED
@@ -54,6 +55,11 @@ const bool is_two = false; ///< Use dual micro-switches
 void MC_PULL_ONLINE_read()
 {
     float *data = ADC_DMA_get_value();
+    
+    // Store previous presence sensor states for edge detection
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        MC_ONLINE_key_stu_prev[i] = MC_ONLINE_key_stu[i];
+    }
     
     // Map ADC channels to sensor readings (channels 3,2,1,0 in reverse order)
     MC_PULL_stu_raw[3] = data[0];
@@ -125,6 +131,17 @@ void MC_PULL_ONLINE_read()
             else if (MC_ONLINE_key_stu_raw[i] < 1.4f)
             { // 仅触发内侧微动 , 需确认是缺料还是抖动.
                 MC_ONLINE_key_stu[i] = 3;
+            }
+        }
+        
+        // Detect presence sensor rising edge (filament insertion) and automatically start feeding
+        if (MC_ONLINE_key_stu_prev[i] == 0 && MC_ONLINE_key_stu[i] == 1) {
+            // Filament presence detected for the first time - automatically start feeding
+            if (get_filament_motion(i) == AMS_filament_motion::idle) {
+                DEBUG_MY("Auto-start feeding for channel ");
+                DEBUG_float(i, 0);
+                DEBUG_MY(" - presence detected\n");
+                set_filament_motion(i, AMS_filament_motion::need_send_out);
             }
         }
     }
@@ -980,9 +997,13 @@ void start_loading_direction_detection(int channel)
     
     #if AUTO_DIRECTION_DEBUG_ENABLED
     DEBUG_MY("Starting loading direction detection for channel ");
-    DEBUG_int(channel);
+    DEBUG_float(channel, 0);
     DEBUG_MY(" testing direction ");
-    DEBUG_int(state.test_direction);
+    DEBUG_float(state.test_direction, 0);
+    DEBUG_MY("\n");
+    #else
+    DEBUG_MY("Loading direction detection started for CH");
+    DEBUG_float(channel, 0);
     DEBUG_MY("\n");
     #endif
 }
@@ -1009,7 +1030,7 @@ void update_loading_direction_detection(int channel)
     if (current_time - state.detection_start_time > 3000) { // 3 second timeout
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Loading direction detection timeout for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY("\n");
         #endif
         state.detection_active = false;
@@ -1034,9 +1055,9 @@ void update_loading_direction_detection(int channel)
         
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(" direction ");
-        DEBUG_int(state.test_direction);
+        DEBUG_float(state.test_direction, 0);
         DEBUG_MY(" is UNLOADING (presence lost)\n");
         #endif
         
@@ -1049,9 +1070,9 @@ void update_loading_direction_detection(int channel)
         
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(" direction ");
-        DEBUG_int(state.test_direction);
+        DEBUG_float(state.test_direction, 0);
         DEBUG_MY(" is LOADING (presence maintained)\n");
         #endif
         
@@ -1088,9 +1109,15 @@ void complete_loading_direction_detection(int channel)
     
     #if AUTO_DIRECTION_DEBUG_ENABLED
     DEBUG_MY("Loading direction detection completed for channel ");
-    DEBUG_int(channel);
+    DEBUG_float(channel, 0);
     DEBUG_MY(": loading direction=");
-    DEBUG_int(loading_dir);
+    DEBUG_float(loading_dir, 0);
+    DEBUG_MY("\n");
+    #else
+    DEBUG_MY("Loading direction learned: CH");
+    DEBUG_float(channel, 0);
+    DEBUG_MY(" dir=");
+    DEBUG_float(loading_dir, 0);
     DEBUG_MY("\n");
     #endif
     
@@ -1148,9 +1175,9 @@ void start_direction_learning(int channel, int commanded_direction)
     
     #if AUTO_DIRECTION_DEBUG_ENABLED
     DEBUG_MY("Starting direction learning for channel ");
-    DEBUG_int(channel);
+    DEBUG_float(channel, 0);
     DEBUG_MY(" with command direction ");
-    DEBUG_int(commanded_direction);
+    DEBUG_float(commanded_direction, 0);
     DEBUG_MY("\n");
     #endif
 }
@@ -1177,7 +1204,7 @@ void update_direction_learning(int channel, float movement_delta)
     if (current_time - state.learning_start_time > AUTO_DIRECTION_TIMEOUT_MS) {
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning timeout for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY("\n");
         #endif
         state.learning_active = false;
@@ -1247,15 +1274,15 @@ void update_direction_learning(int channel, float movement_delta)
         
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(" sample ");
-        DEBUG_int(state.sample_count);
+        DEBUG_float(state.sample_count, 0);
         DEBUG_MY(": movement=");
         DEBUG_float(movement_delta, 3);
         DEBUG_MY(" commanded=");
-        DEBUG_int(state.command_direction);
+        DEBUG_float(state.command_direction, 0);
         DEBUG_MY(" actual=");
-        DEBUG_int(actual_direction);
+        DEBUG_float(actual_direction, 0);
         DEBUG_MY(" match=");
         DEBUG_MY(directions_match ? "Y" : "N");
         DEBUG_MY(" confidence=");
@@ -1295,7 +1322,7 @@ void complete_direction_learning(int channel)
     if (!state.has_valid_data) {
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning failed for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": no valid sensor data\n");
         #endif
         state.learning_active = false;
@@ -1306,7 +1333,7 @@ void complete_direction_learning(int channel)
     if (state.confidence_score < AUTO_DIRECTION_CONFIDENCE_THRESHOLD) {
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning failed for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": confidence too low: ");
         DEBUG_float(state.confidence_score, 3);
         DEBUG_MY("\n");
@@ -1327,7 +1354,7 @@ void complete_direction_learning(int channel)
         // Inconclusive results
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning inconclusive for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": equal pos/neg samples\n");
         #endif
         state.learning_active = false;
@@ -1342,17 +1369,25 @@ void complete_direction_learning(int channel)
         
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning completed for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": direction=");
-        DEBUG_int(learned_direction);
+        DEBUG_float(learned_direction, 0);
         DEBUG_MY(" confidence=");
         DEBUG_float(state.confidence_score, 3);
         DEBUG_MY(" samples=");
-        DEBUG_int(state.sample_count);
+        DEBUG_float(state.sample_count, 0);
         DEBUG_MY(" pos=");
-        DEBUG_int(state.positive_samples);
+        DEBUG_float(state.positive_samples, 0);
         DEBUG_MY(" neg=");
-        DEBUG_int(state.negative_samples);
+        DEBUG_float(state.negative_samples, 0);
+        DEBUG_MY("\n");
+        #else
+        DEBUG_MY("Auto direction learned: CH");
+        DEBUG_float(channel, 0);
+        DEBUG_MY(" dir=");
+        DEBUG_float(learned_direction, 0);
+        DEBUG_MY(" confidence=");
+        DEBUG_float(state.confidence_score, 2);
         DEBUG_MY("\n");
         #endif
         
@@ -1409,7 +1444,7 @@ void reset_direction_learning(int channel)
     
     #if AUTO_DIRECTION_DEBUG_ENABLED
     DEBUG_MY("Direction learning reset for channel ");
-    DEBUG_int(channel);
+    DEBUG_float(channel, 0);
     DEBUG_MY("\n");
     #endif
 }
@@ -1469,12 +1504,14 @@ void MOTOR_get_dir()
         }
     }
     
+    #if AUTO_DIRECTION_LEARNING_ENABLED
     // Initialize direction learning states
     for (int index = 0; index < 4; index++)
     {
         memset(&direction_learning[index], 0, sizeof(DirectionLearningState)); // Properly initialize to zero
         memset(&loading_detection[index], 0, sizeof(LoadingDirectionState)); // Initialize loading detection
     }
+    #endif
     
     MC_AS5600.updata_angle(); //读取5600的初始角度值
 

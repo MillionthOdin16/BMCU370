@@ -1,5 +1,7 @@
 #include "Debug_log.h"
 #include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
 
 #ifdef Debug_log_on
 uint32_t stack[1000];
@@ -84,6 +86,33 @@ void Debug_log_write_num(const void *data, int num)
     DMA_Cmd(DMA1_Channel2, ENABLE);
     // 使能USART3 DMA发送
     USART_DMACmd(USART3, USART_DMAReq_Tx, ENABLE);
+}
+
+void Debug_log_write_float(const void *prefix, float value, int precision)
+{
+    char buffer[32];
+    int prefix_len = strlen((const char*)prefix);
+    memcpy(buffer, prefix, prefix_len);
+    
+    // Convert float to string with specified precision
+    int int_part = (int)value;
+    float frac_part = value - int_part;
+    if (frac_part < 0) frac_part = -frac_part;
+    
+    int len = sprintf(buffer + prefix_len, "%d", int_part);
+    if (precision > 0) {
+        buffer[prefix_len + len] = '.';
+        len++;
+        for (int i = 0; i < precision; i++) {
+            frac_part *= 10;
+            int digit = (int)frac_part;
+            buffer[prefix_len + len + i] = '0' + digit;
+            frac_part -= digit;
+        }
+        len += precision;
+    }
+    
+    Debug_log_write_num(buffer, prefix_len + len);
 }
 
 void USART3_IRQHandler(void)
