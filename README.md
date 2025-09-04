@@ -147,6 +147,78 @@ Each filament channel supports:
 - ✅ Reduced buffer and main board LED brightness for better thermal management
 - ✅ Removed A1 control dependency in material retraction
 
+## Firmware Version Configuration
+
+### Critical Importance
+
+The firmware version reported by the BMCU370 is **essential for printer compatibility**. Bambu Lab printers query the AMS firmware version during initialization and may **reject AMS units with incompatible firmware versions**. This can result in the printer not recognizing the AMS at all.
+
+### Current Firmware Versions
+
+The firmware reports different versions depending on the detected device type:
+
+- **AMS (8-channel)**: Version `00.00.06.49`
+- **AMS Lite**: Version `00.01.02.03`
+
+### Version Configuration
+
+Firmware versions are configured in `src/config.h`:
+
+```c
+// AMS (8-channel) Firmware Version
+#define AMS_FIRMWARE_VERSION_MAJOR      0x00
+#define AMS_FIRMWARE_VERSION_MINOR      0x00  
+#define AMS_FIRMWARE_VERSION_PATCH      0x06
+#define AMS_FIRMWARE_VERSION_BUILD      0x31    // 0x31 = 49 decimal
+
+// AMS Lite Firmware Version  
+#define AMS_LITE_FIRMWARE_VERSION_MAJOR 0x00
+#define AMS_LITE_FIRMWARE_VERSION_MINOR 0x01
+#define AMS_LITE_FIRMWARE_VERSION_PATCH 0x02
+#define AMS_LITE_FIRMWARE_VERSION_BUILD 0x03
+```
+
+### How Version Reporting Works
+
+1. **Printer Query**: The printer sends a BambuBus packet (type `0x103`) requesting version information
+2. **Device Response**: BMCU370 responds with the appropriate version based on its detected device type (AMS vs AMS Lite)
+3. **Compatibility Check**: The printer validates the version against its internal compatibility list
+4. **Result**: Compatible versions allow normal operation; incompatible versions may cause rejection
+
+### Updating Firmware Versions
+
+⚠️ **Warning**: Only change firmware versions if you understand the compatibility requirements.
+
+To update firmware versions:
+
+1. Edit the version constants in `src/config.h`
+2. Rebuild and flash the firmware
+3. Test with your specific printer model and firmware version
+
+### Version Format Details
+
+Versions are transmitted as 4-byte arrays in little-endian format:
+- Byte 0: Build number (LSB)  
+- Byte 1: Patch version
+- Byte 2: Minor version
+- Byte 3: Major version (MSB)
+
+Example: Version `00.00.06.49` is transmitted as `{0x31, 0x06, 0x00, 0x00}`
+
+### Automatic Builds
+
+This repository includes GitHub Actions workflows that automatically build firmware when new tags are created. To trigger a new firmware build:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow will:
+- Build the firmware for CH32V203C8T6
+- Create a GitHub release with firmware binaries
+- Include build information and flashing instructions
+
 ## Troubleshooting
 
 ### Common Issues

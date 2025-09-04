@@ -34,6 +34,30 @@
 #define BAMBU_BUS_VERSION       5           ///< BambuBus protocol version
 
 // =============================================================================
+// Firmware Version Configuration
+// =============================================================================
+// 
+// IMPORTANT: The AMS firmware version reported to the printer is critical for
+// compatibility. Bambu Lab printers may reject AMS units with firmware versions
+// that are too old or incompatible. These versions are sent in response to
+// version query packets from the printer.
+//
+// Version format: Little-endian 4-byte array representing Major.Minor.Patch.Build
+// Example: {0x31, 0x06, 0x00, 0x00} = version 00.00.06.49
+
+// AMS (8-channel) Firmware Version - version 00.00.06.49
+#define AMS_FIRMWARE_VERSION_MAJOR      0x00    ///< Major version (displayed as XX in XX.XX.XX.XX)
+#define AMS_FIRMWARE_VERSION_MINOR      0x00    ///< Minor version (displayed as XX in XX.XX.XX.XX)
+#define AMS_FIRMWARE_VERSION_PATCH      0x06    ///< Patch version (displayed as 06 in XX.XX.06.XX)
+#define AMS_FIRMWARE_VERSION_BUILD      0x31    ///< Build version (displayed as 49 in XX.XX.XX.49)
+
+// AMS Lite Firmware Version - version 00.01.02.03
+#define AMS_LITE_FIRMWARE_VERSION_MAJOR 0x00    ///< Major version (displayed as 00 in 00.01.02.03)
+#define AMS_LITE_FIRMWARE_VERSION_MINOR 0x01    ///< Minor version (displayed as 01 in 00.01.02.03)
+#define AMS_LITE_FIRMWARE_VERSION_PATCH 0x02    ///< Patch version (displayed as 02 in 00.01.02.03)
+#define AMS_LITE_FIRMWARE_VERSION_BUILD 0x03    ///< Build version (displayed as 03 in 00.01.02.03)
+
+// =============================================================================
 // Motion Control Configuration
 // =============================================================================
 

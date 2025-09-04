@@ -1116,10 +1116,25 @@ void send_for_long_packge_serial_number(unsigned char *buf, int length)
     Bambubus_long_package_send(&data);
 }
 
-unsigned char long_packge_version_version_and_name_AMS_lite[] = {0x03, 0x02, 0x01, 0x00, // version number (00.01.02.03)
-                                                                 0x41, 0x4D, 0x53, 0x5F, 0x46, 0x31, 0x30, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // AMS_F102 hw code name 
-unsigned char long_packge_version_version_and_name_AMS08[] = {0x31, 0x06, 0x00, 0x00, // version number (00.00.06.49)
-                                                              0x41, 0x4D, 0x53, 0x30, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+// AMS Lite firmware version and hardware name - configurable via config.h
+unsigned char long_packge_version_version_and_name_AMS_lite[] = {
+    AMS_LITE_FIRMWARE_VERSION_BUILD,  // Build version (LSB)
+    AMS_LITE_FIRMWARE_VERSION_PATCH,  // Patch version  
+    AMS_LITE_FIRMWARE_VERSION_MINOR,  // Minor version
+    AMS_LITE_FIRMWARE_VERSION_MAJOR,  // Major version (MSB)
+    // Hardware identifier: "AMS_F102"
+    0x41, 0x4D, 0x53, 0x5F, 0x46, 0x31, 0x30, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+// AMS (8-channel) firmware version and hardware name - configurable via config.h  
+unsigned char long_packge_version_version_and_name_AMS08[] = {
+    AMS_FIRMWARE_VERSION_BUILD,       // Build version (LSB)
+    AMS_FIRMWARE_VERSION_PATCH,       // Patch version
+    AMS_FIRMWARE_VERSION_MINOR,       // Minor version
+    AMS_FIRMWARE_VERSION_MAJOR,       // Major version (MSB)
+    // Hardware identifier: "AMS08"
+    0x41, 0x4D, 0x53, 0x30, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
 
 void send_for_long_packge_version(unsigned char *buf, int length)
 {

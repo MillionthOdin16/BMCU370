@@ -13,6 +13,61 @@ This document provides detailed API documentation for the BMCU370 firmware modul
 
 ---
 
+## Firmware Version Management
+
+### Overview
+
+The BMCU370 firmware version is critical for compatibility with Bambu Lab printers. When the printer queries the AMS for its firmware version, the response determines whether the printer will accept the AMS as a valid device. Incorrect or outdated firmware versions may cause the printer to reject the AMS entirely.
+
+### Version Configuration
+
+Firmware versions are configured in `src/config.h` using the following constants:
+
+#### AMS (8-channel) Version
+```c
+#define AMS_FIRMWARE_VERSION_MAJOR      0x00    // Major version
+#define AMS_FIRMWARE_VERSION_MINOR      0x00    // Minor version  
+#define AMS_FIRMWARE_VERSION_PATCH      0x06    // Patch version
+#define AMS_FIRMWARE_VERSION_BUILD      0x31    // Build version
+```
+This creates version **00.00.06.49** (displayed as 00.00.06.49 in printer interface).
+
+#### AMS Lite Version
+```c
+#define AMS_LITE_FIRMWARE_VERSION_MAJOR 0x00    // Major version
+#define AMS_LITE_FIRMWARE_VERSION_MINOR 0x01    // Minor version
+#define AMS_LITE_FIRMWARE_VERSION_PATCH 0x02    // Patch version  
+#define AMS_LITE_FIRMWARE_VERSION_BUILD 0x03    // Build version
+```
+This creates version **00.01.02.03** (displayed as 00.01.02.03 in printer interface).
+
+### Version Format
+
+Versions are transmitted as 4-byte little-endian arrays:
+- **Byte 0**: Build version (LSB)
+- **Byte 1**: Patch version  
+- **Byte 2**: Minor version
+- **Byte 3**: Major version (MSB)
+
+### Important Notes
+
+1. **Compatibility**: These versions were determined through reverse engineering and testing with actual Bambu Lab printers
+2. **Updates**: When updating versions, ensure compatibility testing with target printer firmware
+3. **Device Types**: Different AMS types (AMS08 vs AMS Lite) report different versions and hardware identifiers
+4. **Protocol Response**: Versions are sent in response to BambuBus packet type `0x103` (version query)
+
+### Changing Firmware Versions
+
+To modify reported firmware versions:
+
+1. Edit the version constants in `src/config.h`
+2. Rebuild and flash the firmware
+3. Test compatibility with target printer firmware versions
+
+**Warning**: Incorrect firmware versions may cause printer compatibility issues.
+
+---
+
 ## BambuBus Module
 
 The BambuBus module handles communication with Bambu Lab printers using a proprietary serial protocol based on UART through RS485 bus.
