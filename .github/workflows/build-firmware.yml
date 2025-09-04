@@ -118,15 +118,14 @@ jobs:
         retention-days: 90
         compression-level: 6
         
-    - name: Create GitHub Release  
+    - name: Create GitHub Release and Upload Assets
       if: steps.get_version.outputs.is_tag == 'true'
-      id: create_release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.get_version.outputs.version }}
-        release_name: BMCU370 Firmware ${{ steps.get_version.outputs.version }}
+        name: BMCU370 Firmware ${{ steps.get_version.outputs.version }}
         body: |
           ## BMCU370 Firmware Release ${{ steps.get_version.outputs.version }}
           
@@ -170,47 +169,8 @@ jobs:
           For detailed setup instructions, troubleshooting, and development information, see the [project documentation](https://github.com/MillionthOdin16/BMCU370).
         draft: false
         prerelease: false
-        
-    - name: Upload Firmware Binary Asset
-      if: steps.get_version.outputs.is_tag == 'true'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin
-        asset_name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin
-        asset_content_type: application/octet-stream
-
-    - name: Upload ELF Debug Asset  
-      if: steps.get_version.outputs.is_tag == 'true'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf
-        asset_name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf
-        asset_content_type: application/octet-stream
-        
-    - name: Upload Build Information Asset
-      if: steps.get_version.outputs.is_tag == 'true' 
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: firmware-release/BUILD-INFO.txt
-        asset_name: BUILD-INFO.txt
-        asset_content_type: text/plain
-        
-    - name: Upload Checksums Asset
-      if: steps.get_version.outputs.is_tag == 'true'
-      uses: actions/upload-release-asset@v1  
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: firmware-release/SHA256SUMS.txt
-        asset_name: SHA256SUMS.txt
-        asset_content_type: text/plain
+        files: |
+          firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin
+          firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf
+          firmware-release/BUILD-INFO.txt
+          firmware-release/SHA256SUMS.txt
