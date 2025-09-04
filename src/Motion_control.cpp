@@ -615,8 +615,7 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 
                 // Start automatic direction learning if enabled and needed
                 if (AUTO_DIRECTION_LEARNING_ENABLED && 
-                    (Motion_control_data_save.Motion_control_dir[num] == 0 || 
-                     !Motion_control_data_save.auto_learned[num])) {
+                    !Motion_control_data_save.auto_learned[num]) {
                     start_direction_learning(num, -1); // Feeding direction is typically negative
                 }
                 break;
@@ -1456,6 +1455,17 @@ void MOTOR_init()
     
     // Save any updated motor directions to flash
     Motion_control_save();
+    
+    // Validate that all motor directions are properly set (never zero)
+    for (int i = 0; i < 4; i++)
+    {
+        if (MOTOR_CONTROL[i].dir == 0) {
+            // This should never happen after our fix, but add safety check
+            MOTOR_CONTROL[i].dir = (i == 1 || i == 2) ? -1 : 1;
+            Motion_control_data_save.Motion_control_dir[i] = MOTOR_CONTROL[i].dir;
+        }
+    }
+    
     MC_AS5600.updata_angle();
     for (int i = 0; i < 4; i++)
     {
