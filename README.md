@@ -127,16 +127,34 @@ Each filament channel supports:
   - 🔴 Red breathing: Not connected to printer
   - ⚪ White breathing: Normal operation
 
-## Update History
+## Current Release
 
-### Version 0020 (July 17, 2025)
+### Version 2.0.0 (September 4, 2024)
+**🚀 Complete firmware rewrite with major enhancements**
+
+- ✅ **Complete architecture rewrite** with modular design and improved maintainability
+- ✅ **Automated CI/CD pipeline** with GitHub Actions for reliable builds
+- ✅ **PlatformIO integration** for modern development workflow
+- ✅ **Comprehensive documentation** including API and hardware guides
+- ✅ **Configurable firmware versioning** for AMS compatibility management
+- ✅ **Enhanced BambuBus protocol** with improved error handling and CRC validation
+- ✅ **Debug logging system** with configurable levels
+- ✅ **Optimized memory usage** (57.6% flash, 46.5% RAM)
+- ✅ **Cross-platform build support** via PlatformIO
+- ✅ **Automated release management** with build artifacts and documentation
+
+[**📥 Download Latest Release**](https://github.com/MillionthOdin16/BMCU370/releases/latest)
+
+## Previous Release History
+
+### Version 0020 (July 17, 2025) - Original krrr/BMCU370
 - ✅ Fixed lighting logic errors causing some states not to illuminate
 - ✅ Fixed unexpected channel online issues
 - ✅ Corrected anti-disconnect logic (was previously ineffective)
 - ✅ Rewrote lighting system, fixed flickering issues, reduced refresh rate
 - ✅ Added 3-second red light retry for channel errors during operation
 
-### Version 0019 (July 6, 2025)
+### Version 0019 (July 6, 2025) - Original krrr/BMCU370
 - ✅ Compatible with dual micro-switch Hall sensor versions
 - ✅ P1X1 printer now supports 16-color configuration
 - ✅ Fixed filament information saving issues with latest firmware (00.01.06.62)
@@ -144,6 +162,8 @@ Each filament channel supports:
 - ✅ Enhanced motor control logic with voltage-specific handling
 - ✅ Reduced buffer and main board LED brightness for better thermal management
 - ✅ Removed A1 control dependency in material retraction
+
+For complete version history, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Firmware Version Configuration
 
