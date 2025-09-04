@@ -158,6 +158,20 @@ struct DirectionLearningState
     int error_count;              ///< Number of invalid/noisy samples rejected
 } direction_learning[MAX_FILAMENT_CHANNELS];
 
+// Presence-based loading direction detection
+struct LoadingDirectionState
+{
+    bool detection_active;         ///< Currently detecting loading direction
+    bool detection_complete;       ///< Loading direction detection completed
+    uint64_t detection_start_time; ///< When detection started (ms)
+    uint64_t stable_time;          ///< Time when presence became stable (ms)
+    bool initial_presence;         ///< Initial presence sensor state
+    bool presence_lost;            ///< Whether presence was lost during test
+    int test_direction;            ///< Direction being tested (+1 or -1)
+    int confirmed_loading_direction; ///< Confirmed direction that loads filament (0=unknown)
+    bool presence_stable_phase;    ///< Whether we're in the stable monitoring phase
+} loading_detection[MAX_FILAMENT_CHANNELS];
+
 #define Motion_control_save_flash_addr ((uint32_t)0x0800E000)
 bool Motion_control_read()
 {
@@ -613,6 +627,12 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 filament_now_position[num] = filament_sending_out;
                 MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_send, 100);
                 
+                // Start loading direction detection if we don't know the loading direction yet
+                if (loading_detection[num].confirmed_loading_direction == 0 && 
+                    !loading_detection[num].detection_active) {
+                    start_loading_direction_detection(num);
+                }
+                
                 // Start automatic direction learning if enabled and needed
                 if (AUTO_DIRECTION_LEARNING_ENABLED && 
                     !Motion_control_data_save.auto_learned[num]) {
@@ -721,6 +741,11 @@ void motor_motion_run(int error)
         /*if (!get_filament_online(i)) // 通道不在线则电机不允许工作
             MOTOR_CONTROL[i].set_motion(filament_motion_stop, 100);*/
         MOTOR_CONTROL[i].run(time_E); // 根据状态信息来驱动电机
+        
+        // Update loading direction detection
+        if (loading_detection[i].detection_active) {
+            update_loading_direction_detection(i);
+        }
 
         if (MC_PULL_stu[i] == 1)
         {
@@ -915,6 +940,163 @@ void MOTOR_get_pwm_zero()
     }
 }
 // 将角度数值转化为角度差数值
+/**
+ * Initialize loading direction detection for a channel
+ * Called when filament presence is first detected
+ */
+void start_loading_direction_detection(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    // Only start detection if we don't already know the loading direction
+    if (loading_detection[channel].confirmed_loading_direction != 0) {
+        return; // Already know loading direction
+    }
+    
+    // Verify presence sensor is currently triggered
+    if (MC_ONLINE_key_stu[channel] == 0) {
+        return; // No filament detected, can't start detection
+    }
+    
+    LoadingDirectionState& state = loading_detection[channel];
+    
+    // Initialize detection state
+    memset(&state, 0, sizeof(LoadingDirectionState));
+    state.detection_active = true;
+    state.detection_complete = false;
+    state.detection_start_time = get_time64();
+    state.initial_presence = true; // We know filament is present
+    state.presence_lost = false;
+    state.presence_stable_phase = false;
+    
+    // Test current motor direction first
+    state.test_direction = MOTOR_CONTROL[channel].dir;
+    
+    #if AUTO_DIRECTION_DEBUG_ENABLED
+    DEBUG_MY("Starting loading direction detection for channel ");
+    DEBUG_int(channel);
+    DEBUG_MY(" testing direction ");
+    DEBUG_int(state.test_direction);
+    DEBUG_MY("\n");
+    #endif
+}
+
+/**
+ * Update loading direction detection with presence sensor feedback
+ * Called during filament feeding operations
+ */
+void update_loading_direction_detection(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    LoadingDirectionState& state = loading_detection[channel];
+    
+    if (!state.detection_active || state.detection_complete) {
+        return;
+    }
+    
+    uint64_t current_time = get_time64();
+    
+    // Check for timeout
+    if (current_time - state.detection_start_time > 3000) { // 3 second timeout
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Loading direction detection timeout for channel ");
+        DEBUG_int(channel);
+        DEBUG_MY("\n");
+        #endif
+        state.detection_active = false;
+        return;
+    }
+    
+    bool current_presence = (MC_ONLINE_key_stu[channel] != 0);
+    
+    if (!state.presence_stable_phase) {
+        // Initial phase: wait for motor to start moving and presence to stabilize
+        if (current_time - state.detection_start_time > 500) { // Wait 500ms for motor to engage
+            state.presence_stable_phase = true;
+            state.stable_time = current_time;
+        }
+        return;
+    }
+    
+    // Stable phase: monitor presence sensor for direction feedback
+    if (!current_presence && state.initial_presence) {
+        // Filament presence lost - this direction is UNLOADING
+        state.presence_lost = true;
+        
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Channel ");
+        DEBUG_int(channel);
+        DEBUG_MY(" direction ");
+        DEBUG_int(state.test_direction);
+        DEBUG_MY(" is UNLOADING (presence lost)\n");
+        #endif
+        
+        // The opposite direction should be for loading
+        state.confirmed_loading_direction = -state.test_direction;
+        complete_loading_direction_detection(channel);
+        
+    } else if (current_presence && (current_time - state.stable_time > 2000)) {
+        // Filament presence maintained for 2+ seconds - this direction is LOADING
+        
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Channel ");
+        DEBUG_int(channel);
+        DEBUG_MY(" direction ");
+        DEBUG_int(state.test_direction);
+        DEBUG_MY(" is LOADING (presence maintained)\n");
+        #endif
+        
+        state.confirmed_loading_direction = state.test_direction;
+        complete_loading_direction_detection(channel);
+    }
+}
+
+/**
+ * Complete loading direction detection and update motor direction
+ */
+void complete_loading_direction_detection(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    LoadingDirectionState& state = loading_detection[channel];
+    
+    if (state.confirmed_loading_direction == 0) {
+        state.detection_active = false;
+        return;
+    }
+    
+    // Update motor direction for loading operations
+    int loading_dir = state.confirmed_loading_direction;
+    
+    // Save the loading direction (we store the loading direction, not the motor direction)
+    // When we need to load: use loading_dir
+    // When we need to unload: use -loading_dir
+    Motion_control_data_save.Motion_control_dir[channel] = loading_dir;
+    Motion_control_data_save.auto_learned[channel] = true;
+    MOTOR_CONTROL[channel].dir = loading_dir;
+    
+    #if AUTO_DIRECTION_DEBUG_ENABLED
+    DEBUG_MY("Loading direction detection completed for channel ");
+    DEBUG_int(channel);
+    DEBUG_MY(": loading direction=");
+    DEBUG_int(loading_dir);
+    DEBUG_MY("\n");
+    #endif
+    
+    // Save to flash
+    Motion_control_save();
+    
+    state.detection_complete = true;
+    state.detection_active = false;
+}
+
 /**
  * Initialize direction learning for a channel
  * Called when filament feeding begins
@@ -1287,6 +1469,7 @@ void MOTOR_get_dir()
     for (int index = 0; index < 4; index++)
     {
         memset(&direction_learning[index], 0, sizeof(DirectionLearningState)); // Properly initialize to zero
+        memset(&loading_detection[index], 0, sizeof(LoadingDirectionState)); // Initialize loading detection
     }
     
     MC_AS5600.updata_angle(); //读取5600的初始角度值
