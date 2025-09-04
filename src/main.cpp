@@ -66,10 +66,10 @@ uint8_t channel_colors[MAX_FILAMENT_CHANNELS][4] = {
 // Runtime RGB color storage to avoid frequent color updates causing communication failures
 uint8_t channel_runs_colors[MAX_FILAMENT_CHANNELS][2][3] = {
     // R,G,B  ,, R,G,B
-    {{1, 2, 3}, {1, 2, 3}}, // 通道1
-    {{3, 2, 1}, {3, 2, 1}}, // 通道2
-    {{1, 2, 3}, {1, 2, 3}}, // 通道3
-    {{3, 2, 1}, {3, 2, 1}}  // 通道4
+    {{1, 2, 3}, {1, 2, 3}}, // Channel 0
+    {{3, 2, 1}, {3, 2, 1}}, // Channel 1
+    {{1, 2, 3}, {1, 2, 3}}, // Channel 2
+    {{3, 2, 1}, {3, 2, 1}}  // Channel 3
 };
 
 extern void BambuBUS_UART_Init();
@@ -78,14 +78,14 @@ extern void send_uart(const unsigned char *data, uint16_t length);
 void setup()
 {
     WWDG_DeInit();
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_WWDG, DISABLE); // 关闭看门狗
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_WWDG, DISABLE); // Disable watchdog
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
     GPIO_PinRemapConfig(GPIO_Remap_PD01, ENABLE);
-    // 初始化RGB灯
+    // Initialize RGB lights
     RGB_init();
-    // 更新RGB显示
+    // Update RGB display
     RGB_show_data();
-    // 设定RGB亮度 这意味着会保持颜色的比例同时限制最大值。
+    // Set RGB brightness - this maintains color proportions while limiting maximum values
     RGB_Set_Brightness();
 
     BambuBus_init();
@@ -138,25 +138,25 @@ void Set_MC_RGB(uint8_t channel, int num, uint8_t R, uint8_t G, uint8_t B)
 bool MC_STU_ERROR[MAX_FILAMENT_CHANNELS] = {false, false, false, false};
 void Show_SYS_RGB(int BambuBUS_status)
 {
-    // 更新主板RGB灯
-    if (BambuBUS_status == -1) // 离线
+    // Update main board RGB light
+    if (BambuBUS_status == -1) // Offline
     {
-        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 0, 0)); // 红色
+        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 0, 0)); // Red
         strip_PD1.show();
     }
-    else if (BambuBUS_status == 0) // 在线
+    else if (BambuBUS_status == 0) // Online
     {
-        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 9, 9)); // 白色
+        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 9, 9)); // White
         strip_PD1.show();
     }
-    // 更新错误通道，亮起红灯
+    // Update error channels, light up red LEDs
     for (int i = 0; i < 4; i++)
     {
         if (MC_STU_ERROR[i])
         {
-            // 红色
+            // Red color
             strip_channel[i].setPixelColor(0, strip_channel[i].Color(255, 0, 0));
-            strip_channel[i].show(); // 显示新颜色
+            strip_channel[i].show(); // Display new color
         }
     }
 }
@@ -177,14 +177,13 @@ void loop()
             if (stu == BambuBus_package_type::ERROR) // offline
             {
                 error = -1;
-                // 离线-红色灯
+                // Offline - red light
             }
             else // have data
             {
                 error = 0;
                 // if (stu == BambuBus_package_type::heartbeat)
                 // {
-                // 正常工作-白色灯
                 // Normal operation - white light
             }
             
@@ -199,25 +198,25 @@ void loop()
         else
         {
         } // wait for data
-        // log 输出
+        // Log output
         if (is_first_run != stu)
         {
             is_first_run = stu;
             if (stu == BambuBus_package_type::ERROR)
             {                                   // offline
-                DEBUG_MY("BambuBus_offline\n"); // 离线
+                DEBUG_MY("BambuBus_offline\n"); // Offline
             }
             else if (stu == BambuBus_package_type::heartbeat)
             {
-                DEBUG_MY("BambuBus_online\n"); // 在线
+                DEBUG_MY("BambuBus_online\n"); // Online
             }
             else if (device_type == BambuBus_AMS_lite)
             {
-                DEBUG_MY("Run_To_AMS_lite\n"); // 在线
+                DEBUG_MY("Run_To_AMS_lite\n"); // Online as AMS Lite
             }
             else if (device_type == BambuBus_AMS)
             {
-                DEBUG_MY("Run_To_AMS\n"); // 在线
+                DEBUG_MY("Run_To_AMS\n"); // Online as AMS
             }
             else
             {

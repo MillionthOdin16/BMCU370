@@ -6,9 +6,7 @@
 [![License](https://img.shields.io/badge/license-see%20LICENSE-blue)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-CH32V203-orange)](#hardware)
 
-BMCU星尘修改版最新（BMCU-C 370霍尔版 V0.1-0020）源码，原项目链接：[Xing-C/BMCU370x](https://github.com/Xing-C/BMCU370x)。有一些个人小优化。
-
-*English: BMCU Xing-C modified version latest (BMCU-C Hall V0.1-0020) source code with personal optimizations.*
+This is the latest BMCU Xing-C modified version (BMCU-C Hall sensor version V0.1-0020) source code with personal optimizations. Original project: [Xing-C/BMCU370x](https://github.com/Xing-C/BMCU370x).
 
 ## Overview
 

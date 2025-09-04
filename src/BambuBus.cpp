@@ -8,7 +8,7 @@ CRC8 crc_8;
 uint8_t BambuBus_data_buf[1000];
 int BambuBus_have_data = 0;
 uint16_t BambuBus_address = 0;
-uint8_t BambuBus_AMS_num = 0; // 0~3 represents identification as A B C D
+uint8_t BambuBus_AMS_num = 0; // 0-3 represents AMS identification as A, B, C, D
 uint8_t AMS_humidity_wet = DEFAULT_HUMIDITY_WET; // 0~100 (humidity percentage)
 
 /**
