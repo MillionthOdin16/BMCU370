@@ -138,9 +138,13 @@
  * direction detection under real operating conditions.
  */
 #define AUTO_DIRECTION_LEARNING_ENABLED    true     ///< Enable automatic direction learning during feeding
-#define AUTO_DIRECTION_MIN_SAMPLES         3        ///< Minimum samples needed to confirm direction
-#define AUTO_DIRECTION_MIN_MOVEMENT_MM     2.0f     ///< Minimum movement required for valid sample (mm)
-#define AUTO_DIRECTION_TIMEOUT_MS          5000     ///< Timeout for direction learning attempt (ms)
+#define AUTO_DIRECTION_MIN_SAMPLES         3        ///< Minimum samples needed to confirm direction (3-10 recommended)
+#define AUTO_DIRECTION_MIN_MOVEMENT_MM     2.0f     ///< Minimum movement required for valid sample in mm (1.0-5.0 recommended)
+#define AUTO_DIRECTION_TIMEOUT_MS          5000     ///< Timeout for direction learning attempt in ms (3000-10000 recommended)
+#define AUTO_DIRECTION_CONFIDENCE_THRESHOLD 0.7f    ///< Minimum confidence ratio required (0.6-0.9 recommended)
+#define AUTO_DIRECTION_MAX_NOISE_MM        0.5f     ///< Maximum acceptable sensor noise per sample in mm
+#define AUTO_DIRECTION_SAMPLE_INTERVAL_MS  100      ///< Minimum time between samples in ms
+#define AUTO_DIRECTION_DEBUG_ENABLED       false    ///< Enable debug output for direction learning
 
 /**
  * Legacy Motor Direction Correction (Fallback)

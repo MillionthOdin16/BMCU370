@@ -10,3 +10,6 @@ extern void Motion_control_run(int error);
 extern void start_direction_learning(int channel, int commanded_direction);
 extern void update_direction_learning(int channel, float movement_delta);
 extern void complete_direction_learning(int channel);
+extern bool get_direction_learning_status(int channel, float* confidence, int* samples, bool* complete);
+extern void reset_direction_learning(int channel);
+extern void reset_all_learned_directions();

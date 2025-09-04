@@ -2,51 +2,59 @@
 
 ## Issue Description
 
-The BMCU370 firmware has a known issue where certain channels (typically channels 1 and 2, sometimes channel 3) have reversed motor direction despite correct wiring. This causes the filament to be driven away from the tool head when the slider is pressed, instead of toward it.
+The BMCU370 firmware experienced motor direction reversal issues where certain channels (typically channels 1 and 2, sometimes channel 3) had reversed motor direction despite correct wiring. This caused the filament to be driven away from the tool head when the slider is pressed, instead of toward it.
 
 ## Root Cause
 
-The issue occurs during automatic motor direction detection in the `MOTOR_get_dir()` function. The detection algorithm:
+The primary root cause is **inconsistent magnet polarity orientation during assembly**:
 
-1. Applies PWM to each motor channel
-2. Measures angle displacement using AS5600 Hall sensors
-3. Determines direction based on positive/negative angle change
+- **AS5600 Sensor Dependency**: The direction detection relies on AS5600 Hall sensors measuring magnetic field changes from diametrically magnetized magnets
+- **Polarity Sensitivity**: The sensors are extremely sensitive to which magnetic pole (North or South) faces the sensor
+- **Assembly Variation**: Without specific polarity requirements in assembly instructions, magnets were installed with random orientations
+- **Unpredictable Results**: Random magnet installation created unpredictable direction detection errors across channels
 
-However, due to hardware variations between channels:
+### Additional Contributing Factors
 - Different physical mounting orientations of AS5600 sensors
 - Inconsistent gear orientations across channels  
 - PCB layout differences
-- **Inconsistent magnet polarity orientation across channels**
+- Variations in motor wiring between channels
 
-The direction interpretation can be incorrect for certain channels.
-
-### Magnet Polarity Impact
-
-**Critical Factor**: The AS5600 hall sensors rely on diametrically magnetized magnets, and the polarity orientation directly affects direction detection:
-
-- **Consistent Polarity**: When all magnets are installed with the same pole (North or South) facing the sensor, angle readings increase/decrease consistently for the same rotation direction across all channels
-- **Inconsistent Polarity**: When magnets are installed with different pole orientations, the same motor rotation direction will produce opposite angle changes on different channels
-- **Assembly Sensitivity**: Without specific polarity marking in assembly instructions, magnets may be installed randomly, causing unpredictable direction reversals
-
-This explains why the issue appears on certain channels (1, 2, and sometimes 3) but not others - it depends on how the magnets were oriented during assembly.
+This explains why the issue appeared on certain channels (1, 2, and sometimes 3) but not others - it depended on random magnet orientation during assembly.
 
 ## Solution
 
-### Automatic Direction Correction (Primary Fix)
+### Primary: Automatic Direction Learning (Recommended)
 
-The firmware now includes automatic direction correction for affected channels:
+The firmware now includes an **intelligent automatic direction detection system** that learns correct motor directions during normal filament feeding operations:
+
+**How It Works:**
+1. **Real-world Learning**: System learns direction during actual filament loading operations
+2. **Sensor Correlation**: Compares commanded motor direction with actual movement detected by AS5600 sensors
+3. **Multiple Validation**: Collects multiple samples under load for high accuracy
+4. **Automatic Correction**: If direction is inverted, automatically corrects and saves the proper direction
+5. **Persistent Memory**: Learned directions are saved to flash memory permanently
+
+**Key Benefits:**
+- ✅ **No disassembly required** - Works during normal filament loading
+- ✅ **Higher accuracy** - Uses real filament conditions vs no-load testing
+- ✅ **User-friendly** - Completely automatic, no technical knowledge required
+- ✅ **Addresses root cause** - Automatically compensates for any magnet polarity orientation
+
+See [AUTOMATIC_DIRECTION_DETECTION.md](AUTOMATIC_DIRECTION_DETECTION.md) for complete details.
+
+### Fallback: Static Direction Correction
+
+If automatic learning is disabled, the system falls back to static per-channel corrections:
 
 ```c
-// In config.h
+// In config.h - Used only when AUTO_DIRECTION_LEARNING_ENABLED = false
 #define MOTOR_DIR_CORRECTION_CH0   false     // Channel 0 (typically correct)
 #define MOTOR_DIR_CORRECTION_CH1   true      // Channel 1 (commonly reversed)
 #define MOTOR_DIR_CORRECTION_CH2   true      // Channel 2 (commonly reversed)  
 #define MOTOR_DIR_CORRECTION_CH3   false     // Channel 3 (typically correct)
 ```
 
-This correction is applied automatically after direction detection but before the values are saved to flash memory.
-
-### Configuration Options
+This correction is applied after direction detection but before values are saved to flash memory.
 
 #### For Standard Hardware (Default)
 The default configuration should work for most BMCU370 units:
