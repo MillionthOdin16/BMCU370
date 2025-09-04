@@ -1438,8 +1438,24 @@ void MOTOR_init()
     {
         Motion_control_set_PWM(index, 0);
         MOTOR_CONTROL[index].set_pwm_zero(500);
-        MOTOR_CONTROL[index].dir = Motion_control_data_save.Motion_control_dir[index];
+        // Ensure motor direction is never zero to prevent complete motor failure
+        int motor_dir = Motion_control_data_save.Motion_control_dir[index];
+        if (motor_dir == 0) {
+            // If no direction is saved, use default direction based on channel
+            // Apply static corrections for known problematic channels
+            motor_dir = 1; // Default positive direction
+            if (index == 1 || index == 2) {
+                motor_dir = -1; // Channels 1 and 2 commonly need reversal
+            }
+            // Save the default direction for future use
+            Motion_control_data_save.Motion_control_dir[index] = motor_dir;
+            Motion_control_data_save.auto_learned[index] = false;
+        }
+        MOTOR_CONTROL[index].dir = motor_dir;
     }
+    
+    // Save any updated motor directions to flash
+    Motion_control_save();
     MC_AS5600.updata_angle();
     for (int i = 0; i < 4; i++)
     {
