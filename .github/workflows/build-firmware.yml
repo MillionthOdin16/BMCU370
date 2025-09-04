@@ -28,126 +28,173 @@ jobs:
       run: |
         pio run
         
-    - name: Get tag name
-      id: get_tag
+    - name: Get version and build metadata
+      id: get_version
       run: |
         if [[ $GITHUB_REF == refs/tags/* ]]; then
-          echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "is_tag=true" >> $GITHUB_OUTPUT
         else
-          echo "tag_name=manual-build" >> $GITHUB_OUTPUT
+          VERSION="dev-$(date +%Y%m%d-%H%M%S)"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "is_tag=false" >> $GITHUB_OUTPUT
         fi
         
+        # Build metadata
+        echo "build_date=$(date -u +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
+        echo "commit_short=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
+        echo "platform=ch32v203c8t6" >> $GITHUB_OUTPUT
+        echo "arch=riscv32" >> $GITHUB_OUTPUT
+        
     - name: Prepare firmware artifacts
       run: |
+        # Create release directory with organized structure
         mkdir -p firmware-release
-        cp .pio/build/genericCH32V203C8T6/firmware.bin firmware-release/BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.bin
-        cp .pio/build/genericCH32V203C8T6/firmware.elf firmware-release/BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.elf
         
-        # Create build info file
+        # Define artifact naming variables
+        PLATFORM="${{ steps.get_version.outputs.platform }}"
+        ARCH="${{ steps.get_version.outputs.arch }}"  
+        VERSION="${{ steps.get_version.outputs.version }}"
+        BUILD_DATE="${{ steps.get_version.outputs.build_date }}"
+        COMMIT_SHORT="${{ steps.get_version.outputs.commit_short }}"
+        
+        # Copy firmware files with proper naming convention
+        # Format: bmcu370-firmware_<version>_<platform>-<arch>.<ext>
+        cp .pio/build/genericCH32V203C8T6/firmware.bin "firmware-release/bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.bin"
+        cp .pio/build/genericCH32V203C8T6/firmware.elf "firmware-release/bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.elf"
+        
+        # Create comprehensive build info file
         cat > firmware-release/BUILD-INFO.txt << EOF
         BMCU370 Firmware Build Information
         ===================================
         
-        Tag: ${{ steps.get_tag.outputs.tag_name }}
-        Commit: ${{ github.sha }}
-        Build Date: $(date -u)
+        Version: ${VERSION}
+        Platform: ${PLATFORM^^} (${ARCH^^})
+        Commit: ${COMMIT_SHORT} (${GITHUB_SHA})
+        Build Date: ${BUILD_DATE} UTC
         PlatformIO Version: $(pio --version)
         
-        Hardware Target: CH32V203C8T6
-        Framework: Arduino
+        Hardware Specifications:
+        - Target MCU: CH32V203C8T6 
+        - Architecture: RISC-V 32-bit
+        - Clock Speed: 144MHz
+        - Framework: Arduino
         
-        Firmware Version Information:
+        Firmware Configuration:
         - AMS Firmware Version: 00.00.06.49
         - AMS Lite Firmware Version: 00.01.02.03
         - BambuBus Protocol Version: 5
         
-        Files in this release:
-        - BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.bin - Main firmware binary for flashing
-        - BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.elf - ELF debug file
-        - BUILD-INFO.txt - This build information file
+        Release Artifacts:
+        - bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.bin - Main firmware binary for flashing
+        - bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.elf - ELF debug symbols and metadata  
+        - BUILD-INFO.txt - This build information and metadata file
         
-        Flash Instructions:
-        1. Use a compatible CH32V programmer (e.g., WCH-Link)
+        Installation Instructions:
+        1. Use a compatible CH32V programmer (WCH-Link recommended)
         2. Flash the .bin file to address 0x08000000
         3. Reset the device to start the new firmware
         
-        For more information, see the project documentation:
+        Compatibility:
+        - Bambu Lab X1/X1C series printers
+        - Bambu Lab A1/A1 mini series printers  
+        - Bambu Lab P1P/P1S series printers
+        
+        For detailed documentation and troubleshooting:
         https://github.com/MillionthOdin16/BMCU370
         EOF
         
-    - name: Upload firmware artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}
-        path: firmware-release/
+        # Create SHA256 checksums for verification
+        cd firmware-release
+        sha256sum *.bin *.elf > SHA256SUMS.txt
+        cd ..
         
-    - name: Create GitHub Release
-      if: steps.get_tag.outputs.is_tag == 'true'
+    - name: Upload firmware artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}
+        path: firmware-release/
+        retention-days: 90
+        compression-level: 6
+        
+    - name: Create GitHub Release  
+      if: steps.get_version.outputs.is_tag == 'true'
+      id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ steps.get_tag.outputs.tag_name }}
-        release_name: BMCU370 Firmware ${{ steps.get_tag.outputs.tag_name }}
+        tag_name: ${{ steps.get_version.outputs.version }}
+        release_name: BMCU370 Firmware ${{ steps.get_version.outputs.version }}
         body: |
-          ## BMCU370 Firmware Release ${{ steps.get_tag.outputs.tag_name }}
+          ## BMCU370 Firmware Release ${{ steps.get_version.outputs.version }}
           
-          ### Features
+          **Platform:** CH32V203C8T6 (RISC-V 32-bit, 144MHz)  
+          **Build:** ${{ steps.get_version.outputs.commit_short }} • ${{ steps.get_version.outputs.build_date }} UTC
+          
+          ### 🚀 Features
           - Complete AMS and AMS Lite compatibility
-          - BambuBus protocol support with CRC validation
-          - Multi-channel filament management
-          - RGB LED status indicators
-          - Flash-based configuration storage
+          - BambuBus protocol v5 support with CRC validation
+          - Multi-channel filament management (configurable LED counts)
+          - RGB LED status indicators with smooth transitions
+          - Flash-based configuration storage with wear leveling
+          - Advanced Hall sensor integration (AS5600) with calibration
           
-          ### Firmware Information
+          ### 📋 Firmware Information  
           - **AMS Firmware Version**: 00.00.06.49
-          - **AMS Lite Firmware Version**: 00.01.02.03  
+          - **AMS Lite Firmware Version**: 00.01.02.03
           - **BambuBus Protocol Version**: 5
-          - **Hardware Target**: CH32V203C8T6
+          - **Hardware Target**: CH32V203C8T6 (RISC-V)
           - **Build Commit**: ${{ github.sha }}
           
-          ### Installation
-          1. Download the `BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.bin` file
-          2. Use a CH32V programmer (WCH-Link recommended)  
-          3. Flash to address 0x08000000
-          4. Reset the device
+          ### 📦 Release Artifacts
+          - `bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin` - Main firmware binary
+          - `bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf` - Debug symbols
+          - `BUILD-INFO.txt` - Complete build information and metadata
+          - `SHA256SUMS.txt` - Checksums for artifact verification
           
-          ### Compatibility
-          This firmware is compatible with:
-          - Bambu Lab X1 series printers
-          - Bambu Lab A1 series printers
-          - Bambu Lab P1 series printers
+          ### 🔧 Installation
+          1. Download the `.bin` firmware file
+          2. Connect CH32V programmer (WCH-Link recommended)
+          3. Flash to address `0x08000000` using WCH-LinkUtility or compatible tool
+          4. Reset device to boot new firmware
           
-          See the project documentation for detailed setup instructions and troubleshooting.
+          ### ✅ Compatibility  
+          - Bambu Lab X1/X1C series printers
+          - Bambu Lab A1/A1 mini series printers
+          - Bambu Lab P1P/P1S series printers
+          
+          **⚠️ Note:** Always verify checksums before flashing firmware to ensure integrity.
+          
+          For detailed setup instructions, troubleshooting, and development information, see the [project documentation](https://github.com/MillionthOdin16/BMCU370).
         draft: false
         prerelease: false
         
-    - name: Upload Release Assets
-      if: steps.get_tag.outputs.is_tag == 'true'
+    - name: Upload Firmware Binary Asset
+      if: steps.get_version.outputs.is_tag == 'true'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: firmware-release/BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.bin
-        asset_name: BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.bin
+        asset_path: firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin
+        asset_name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin
         asset_content_type: application/octet-stream
 
-    - name: Upload ELF Asset  
-      if: steps.get_tag.outputs.is_tag == 'true'
+    - name: Upload ELF Debug Asset  
+      if: steps.get_version.outputs.is_tag == 'true'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: firmware-release/BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.elf
-        asset_name: BMCU370-firmware-${{ steps.get_tag.outputs.tag_name }}.elf
+        asset_path: firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf
+        asset_name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf
         asset_content_type: application/octet-stream
         
-    - name: Upload Build Info Asset
-      if: steps.get_tag.outputs.is_tag == 'true' 
+    - name: Upload Build Information Asset
+      if: steps.get_version.outputs.is_tag == 'true' 
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -155,4 +202,15 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: firmware-release/BUILD-INFO.txt
         asset_name: BUILD-INFO.txt
+        asset_content_type: text/plain
+        
+    - name: Upload Checksums Asset
+      if: steps.get_version.outputs.is_tag == 'true'
+      uses: actions/upload-release-asset@v1  
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: firmware-release/SHA256SUMS.txt
+        asset_name: SHA256SUMS.txt
         asset_content_type: text/plain
