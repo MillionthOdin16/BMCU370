@@ -13,3 +13,8 @@ extern void complete_direction_learning(int channel);
 extern bool get_direction_learning_status(int channel, float* confidence, int* samples, bool* complete);
 extern void reset_direction_learning(int channel);
 extern void reset_all_learned_directions();
+
+// Loading direction detection functions
+extern void start_loading_direction_detection(int channel);
+extern void update_loading_direction_detection(int channel);
+extern void complete_loading_direction_detection(int channel);

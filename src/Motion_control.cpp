@@ -27,6 +27,7 @@ float MC_ONLINE_key_stu_raw[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Raw onli
 
 // Channel status: 0=offline, 1=both micro-switches triggered, 2=outer triggered, 3=inner triggered  
 int MC_ONLINE_key_stu[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
+int MC_ONLINE_key_stu_prev[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Previous presence sensor state for edge detection
 
 // Voltage control constants (defined in config.h)
 const float PULL_voltage_up = PULL_VOLTAGE_HIGH;     ///< High pressure threshold - red LED
@@ -54,6 +55,11 @@ const bool is_two = false; ///< Use dual micro-switches
 void MC_PULL_ONLINE_read()
 {
     float *data = ADC_DMA_get_value();
+    
+    // Store previous presence sensor states for edge detection
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        MC_ONLINE_key_stu_prev[i] = MC_ONLINE_key_stu[i];
+    }
     
     // Map ADC channels to sensor readings (channels 3,2,1,0 in reverse order)
     MC_PULL_stu_raw[3] = data[0];
@@ -127,6 +133,17 @@ void MC_PULL_ONLINE_read()
                 MC_ONLINE_key_stu[i] = 3;
             }
         }
+        
+        // Detect presence sensor rising edge (filament insertion) and automatically start feeding
+        if (MC_ONLINE_key_stu_prev[i] == 0 && MC_ONLINE_key_stu[i] == 1) {
+            // Filament presence detected for the first time - automatically start feeding
+            if (get_filament_motion(i) == AMS_filament_motion::idle) {
+                DEBUG_MY("Auto-start feeding for channel ");
+                DEBUG_float(i, 0);
+                DEBUG_MY(" - presence detected\n");
+                set_filament_motion(i, AMS_filament_motion::need_send_out);
+            }
+        }
     }
 }
 
@@ -157,6 +174,20 @@ struct DirectionLearningState
     bool has_valid_data;          ///< Whether any valid sensor data was received
     int error_count;              ///< Number of invalid/noisy samples rejected
 } direction_learning[MAX_FILAMENT_CHANNELS];
+
+// Presence-based loading direction detection
+struct LoadingDirectionState
+{
+    bool detection_active;         ///< Currently detecting loading direction
+    bool detection_complete;       ///< Loading direction detection completed
+    uint64_t detection_start_time; ///< When detection started (ms)
+    uint64_t stable_time;          ///< Time when presence became stable (ms)
+    bool initial_presence;         ///< Initial presence sensor state
+    bool presence_lost;            ///< Whether presence was lost during test
+    int test_direction;            ///< Direction being tested (+1 or -1)
+    int confirmed_loading_direction; ///< Confirmed direction that loads filament (0=unknown)
+    bool presence_stable_phase;    ///< Whether we're in the stable monitoring phase
+} loading_detection[MAX_FILAMENT_CHANNELS];
 
 #define Motion_control_save_flash_addr ((uint32_t)0x0800E000)
 bool Motion_control_read()
@@ -415,9 +446,13 @@ public:
                     if (device_type == BambuBus_AMS_lite)
                     {
                         if (MC_PULL_stu_raw[CHx] < PULL_VOLTAGE_SEND_MAX) // 压力主动到这个位置
+                        {
                             speed_set = 30;
+                        }
                         else
-                            speed_set = 0; // 原版这里是 10
+                        {
+                            speed_set = 10; // 原版这里是 10 - restored original working value
+                        }
                     }
                     else
                     {
@@ -613,10 +648,15 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 filament_now_position[num] = filament_sending_out;
                 MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_send, 100);
                 
+                // Start loading direction detection if we don't know the loading direction yet
+                if (loading_detection[num].confirmed_loading_direction == 0 && 
+                    !loading_detection[num].detection_active) {
+                    start_loading_direction_detection(num);
+                }
+                
                 // Start automatic direction learning if enabled and needed
                 if (AUTO_DIRECTION_LEARNING_ENABLED && 
-                    (Motion_control_data_save.Motion_control_dir[num] == 0 || 
-                     !Motion_control_data_save.auto_learned[num])) {
+                    !Motion_control_data_save.auto_learned[num]) {
                     start_direction_learning(num, -1); // Feeding direction is typically negative
                 }
                 break;
@@ -722,6 +762,11 @@ void motor_motion_run(int error)
         /*if (!get_filament_online(i)) // 通道不在线则电机不允许工作
             MOTOR_CONTROL[i].set_motion(filament_motion_stop, 100);*/
         MOTOR_CONTROL[i].run(time_E); // 根据状态信息来驱动电机
+        
+        // Update loading direction detection
+        if (loading_detection[i].detection_active) {
+            update_loading_direction_detection(i);
+        }
 
         if (MC_PULL_stu[i] == 1)
         {
@@ -917,6 +962,173 @@ void MOTOR_get_pwm_zero()
 }
 // 将角度数值转化为角度差数值
 /**
+ * Initialize loading direction detection for a channel
+ * Called when filament presence is first detected
+ */
+void start_loading_direction_detection(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    // Only start detection if we don't already know the loading direction
+    if (loading_detection[channel].confirmed_loading_direction != 0) {
+        return; // Already know loading direction
+    }
+    
+    // Verify presence sensor is currently triggered
+    if (MC_ONLINE_key_stu[channel] == 0) {
+        return; // No filament detected, can't start detection
+    }
+    
+    LoadingDirectionState& state = loading_detection[channel];
+    
+    // Initialize detection state
+    memset(&state, 0, sizeof(LoadingDirectionState));
+    state.detection_active = true;
+    state.detection_complete = false;
+    state.detection_start_time = get_time64();
+    state.initial_presence = true; // We know filament is present
+    state.presence_lost = false;
+    state.presence_stable_phase = false;
+    
+    // Test current motor direction first
+    state.test_direction = MOTOR_CONTROL[channel].dir;
+    
+    #if AUTO_DIRECTION_DEBUG_ENABLED
+    DEBUG_MY("Starting loading direction detection for channel ");
+    DEBUG_float(channel, 0);
+    DEBUG_MY(" testing direction ");
+    DEBUG_float(state.test_direction, 0);
+    DEBUG_MY("\n");
+    #else
+    DEBUG_MY("Loading direction detection started for CH");
+    DEBUG_float(channel, 0);
+    DEBUG_MY("\n");
+    #endif
+}
+
+/**
+ * Update loading direction detection with presence sensor feedback
+ * Called during filament feeding operations
+ */
+void update_loading_direction_detection(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    LoadingDirectionState& state = loading_detection[channel];
+    
+    if (!state.detection_active || state.detection_complete) {
+        return;
+    }
+    
+    uint64_t current_time = get_time64();
+    
+    // Check for timeout
+    if (current_time - state.detection_start_time > 3000) { // 3 second timeout
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Loading direction detection timeout for channel ");
+        DEBUG_float(channel, 0);
+        DEBUG_MY("\n");
+        #endif
+        state.detection_active = false;
+        return;
+    }
+    
+    bool current_presence = (MC_ONLINE_key_stu[channel] != 0);
+    
+    if (!state.presence_stable_phase) {
+        // Initial phase: wait for motor to start moving and presence to stabilize
+        if (current_time - state.detection_start_time > 500) { // Wait 500ms for motor to engage
+            state.presence_stable_phase = true;
+            state.stable_time = current_time;
+        }
+        return;
+    }
+    
+    // Stable phase: monitor presence sensor for direction feedback
+    if (!current_presence && state.initial_presence) {
+        // Filament presence lost - this direction is UNLOADING
+        state.presence_lost = true;
+        
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Channel ");
+        DEBUG_float(channel, 0);
+        DEBUG_MY(" direction ");
+        DEBUG_float(state.test_direction, 0);
+        DEBUG_MY(" is UNLOADING (presence lost)\n");
+        #endif
+        
+        // The opposite direction should be for loading
+        state.confirmed_loading_direction = -state.test_direction;
+        complete_loading_direction_detection(channel);
+        
+    } else if (current_presence && (current_time - state.stable_time > 2000)) {
+        // Filament presence maintained for 2+ seconds - this direction is LOADING
+        
+        #if AUTO_DIRECTION_DEBUG_ENABLED
+        DEBUG_MY("Channel ");
+        DEBUG_float(channel, 0);
+        DEBUG_MY(" direction ");
+        DEBUG_float(state.test_direction, 0);
+        DEBUG_MY(" is LOADING (presence maintained)\n");
+        #endif
+        
+        state.confirmed_loading_direction = state.test_direction;
+        complete_loading_direction_detection(channel);
+    }
+}
+
+/**
+ * Complete loading direction detection and update motor direction
+ */
+void complete_loading_direction_detection(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    LoadingDirectionState& state = loading_detection[channel];
+    
+    if (state.confirmed_loading_direction == 0) {
+        state.detection_active = false;
+        return;
+    }
+    
+    // Update motor direction for loading operations
+    int loading_dir = state.confirmed_loading_direction;
+    
+    // Save the loading direction (we store the loading direction, not the motor direction)
+    // When we need to load: use loading_dir
+    // When we need to unload: use -loading_dir
+    Motion_control_data_save.Motion_control_dir[channel] = loading_dir;
+    Motion_control_data_save.auto_learned[channel] = true;
+    MOTOR_CONTROL[channel].dir = loading_dir;
+    
+    #if AUTO_DIRECTION_DEBUG_ENABLED
+    DEBUG_MY("Loading direction detection completed for channel ");
+    DEBUG_float(channel, 0);
+    DEBUG_MY(": loading direction=");
+    DEBUG_float(loading_dir, 0);
+    DEBUG_MY("\n");
+    #else
+    DEBUG_MY("Loading direction learned: CH");
+    DEBUG_float(channel, 0);
+    DEBUG_MY(" dir=");
+    DEBUG_float(loading_dir, 0);
+    DEBUG_MY("\n");
+    #endif
+    
+    // Save to flash
+    Motion_control_save();
+    
+    state.detection_complete = true;
+    state.detection_active = false;
+}
+
+/**
  * Initialize direction learning for a channel
  * Called when filament feeding begins
  */
@@ -963,9 +1175,9 @@ void start_direction_learning(int channel, int commanded_direction)
     
     #if AUTO_DIRECTION_DEBUG_ENABLED
     DEBUG_MY("Starting direction learning for channel ");
-    DEBUG_int(channel);
+    DEBUG_float(channel, 0);
     DEBUG_MY(" with command direction ");
-    DEBUG_int(commanded_direction);
+    DEBUG_float(commanded_direction, 0);
     DEBUG_MY("\n");
     #endif
 }
@@ -992,7 +1204,7 @@ void update_direction_learning(int channel, float movement_delta)
     if (current_time - state.learning_start_time > AUTO_DIRECTION_TIMEOUT_MS) {
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning timeout for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY("\n");
         #endif
         state.learning_active = false;
@@ -1062,15 +1274,15 @@ void update_direction_learning(int channel, float movement_delta)
         
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(" sample ");
-        DEBUG_int(state.sample_count);
+        DEBUG_float(state.sample_count, 0);
         DEBUG_MY(": movement=");
         DEBUG_float(movement_delta, 3);
         DEBUG_MY(" commanded=");
-        DEBUG_int(state.command_direction);
+        DEBUG_float(state.command_direction, 0);
         DEBUG_MY(" actual=");
-        DEBUG_int(actual_direction);
+        DEBUG_float(actual_direction, 0);
         DEBUG_MY(" match=");
         DEBUG_MY(directions_match ? "Y" : "N");
         DEBUG_MY(" confidence=");
@@ -1110,7 +1322,7 @@ void complete_direction_learning(int channel)
     if (!state.has_valid_data) {
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning failed for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": no valid sensor data\n");
         #endif
         state.learning_active = false;
@@ -1121,7 +1333,7 @@ void complete_direction_learning(int channel)
     if (state.confidence_score < AUTO_DIRECTION_CONFIDENCE_THRESHOLD) {
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning failed for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": confidence too low: ");
         DEBUG_float(state.confidence_score, 3);
         DEBUG_MY("\n");
@@ -1142,7 +1354,7 @@ void complete_direction_learning(int channel)
         // Inconclusive results
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning inconclusive for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": equal pos/neg samples\n");
         #endif
         state.learning_active = false;
@@ -1157,17 +1369,25 @@ void complete_direction_learning(int channel)
         
         #if AUTO_DIRECTION_DEBUG_ENABLED
         DEBUG_MY("Direction learning completed for channel ");
-        DEBUG_int(channel);
+        DEBUG_float(channel, 0);
         DEBUG_MY(": direction=");
-        DEBUG_int(learned_direction);
+        DEBUG_float(learned_direction, 0);
         DEBUG_MY(" confidence=");
         DEBUG_float(state.confidence_score, 3);
         DEBUG_MY(" samples=");
-        DEBUG_int(state.sample_count);
+        DEBUG_float(state.sample_count, 0);
         DEBUG_MY(" pos=");
-        DEBUG_int(state.positive_samples);
+        DEBUG_float(state.positive_samples, 0);
         DEBUG_MY(" neg=");
-        DEBUG_int(state.negative_samples);
+        DEBUG_float(state.negative_samples, 0);
+        DEBUG_MY("\n");
+        #else
+        DEBUG_MY("Auto direction learned: CH");
+        DEBUG_float(channel, 0);
+        DEBUG_MY(" dir=");
+        DEBUG_float(learned_direction, 0);
+        DEBUG_MY(" confidence=");
+        DEBUG_float(state.confidence_score, 2);
         DEBUG_MY("\n");
         #endif
         
@@ -1224,7 +1444,7 @@ void reset_direction_learning(int channel)
     
     #if AUTO_DIRECTION_DEBUG_ENABLED
     DEBUG_MY("Direction learning reset for channel ");
-    DEBUG_int(channel);
+    DEBUG_float(channel, 0);
     DEBUG_MY("\n");
     #endif
 }
@@ -1284,11 +1504,14 @@ void MOTOR_get_dir()
         }
     }
     
+    #if AUTO_DIRECTION_LEARNING_ENABLED
     // Initialize direction learning states
     for (int index = 0; index < 4; index++)
     {
         memset(&direction_learning[index], 0, sizeof(DirectionLearningState)); // Properly initialize to zero
+        memset(&loading_detection[index], 0, sizeof(LoadingDirectionState)); // Initialize loading detection
     }
+    #endif
     
     MC_AS5600.updata_angle(); //读取5600的初始角度值
 
@@ -1432,14 +1655,52 @@ void MOTOR_init()
     { // 首次启动
         // set_motor_directions(1 , 1 , 1 , 1 ); // 1为正转 -1为反转
         // 如果自动检测+修正仍有问题，可取消注释上行并调整方向值
+        
+        // To reset all learned directions, uncomment the next line:
+        // reset_all_learned_directions(); // Clears all saved directions and forces relearning
+        
         first_boot = 0;
     }
     for (int index = 0; index < 4; index++)
     {
         Motion_control_set_PWM(index, 0);
         MOTOR_CONTROL[index].set_pwm_zero(500);
-        MOTOR_CONTROL[index].dir = Motion_control_data_save.Motion_control_dir[index];
+        // Ensure motor direction is never zero to prevent complete motor failure
+        int motor_dir = Motion_control_data_save.Motion_control_dir[index];
+        if (motor_dir == 0) {
+            // If no direction is saved, use default direction for all channels
+            motor_dir = 1; // Default positive direction for ALL channels
+            // Save the default direction for future use
+            Motion_control_data_save.Motion_control_dir[index] = motor_dir;
+            Motion_control_data_save.auto_learned[index] = false;
+        }
+        MOTOR_CONTROL[index].dir = motor_dir;
     }
+    
+    // Debug: Print motor directions being initialized
+    DEBUG_MY("Motor directions set: CH0=");
+    DEBUG_MY(MOTOR_CONTROL[0].dir > 0 ? "+" : "-");
+    DEBUG_MY(" CH1=");  
+    DEBUG_MY(MOTOR_CONTROL[1].dir > 0 ? "+" : "-");
+    DEBUG_MY(" CH2=");
+    DEBUG_MY(MOTOR_CONTROL[2].dir > 0 ? "+" : "-");
+    DEBUG_MY(" CH3=");
+    DEBUG_MY(MOTOR_CONTROL[3].dir > 0 ? "+" : "-");
+    DEBUG_MY("\n");
+    
+    // Save any updated motor directions to flash
+    Motion_control_save();
+    
+    // Validate that all motor directions are properly set (never zero)
+    for (int i = 0; i < 4; i++)
+    {
+        if (MOTOR_CONTROL[i].dir == 0) {
+            // This should never happen after our fix, but add safety check
+            MOTOR_CONTROL[i].dir = 1; // Use same default for all channels
+            Motion_control_data_save.Motion_control_dir[i] = MOTOR_CONTROL[i].dir;
+        }
+    }
+    
     MC_AS5600.updata_angle();
     for (int i = 0; i < 4; i++)
     {
