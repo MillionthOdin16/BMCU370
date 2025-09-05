@@ -77,6 +77,9 @@
 // Speed filtering constant
 #define SPEED_FILTER_K          100         ///< Speed calculation filter coefficient
 
+// Enable optimized sensor filtering
+#define ENABLE_OPTIMIZED_FILTERING      true
+
 // =============================================================================
 // Flash Memory Configuration
 // =============================================================================

@@ -3,6 +3,7 @@
 
 #include "BambuBus.h"
 #include "Adafruit_NeoPixel.h"
+#include "performance_optimization.h"
 
 extern void debug_send_run();
 
@@ -47,13 +48,78 @@ void RGB_init() {
 
 /**
  * Update all RGB LED strips with current data
+ * Optimized version with performance monitoring
  */
 void RGB_show_data() {
+    #if ENABLE_PERFORMANCE_MONITORING
+    uint32_t start_time = micros();
+    performance_cpu_busy_start();
+    #endif
+    
     strip_PD1.show();
     for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
         strip_channel[i].show();
     }
+    
+    #if ENABLE_PERFORMANCE_MONITORING
+    performance_cpu_busy_end();
+    uint32_t end_time = micros();
+    performance_record_led_time(end_time - start_time);
+    #endif
 }
+
+#if ENABLE_LED_UPDATE_OPTIMIZATION
+// Optimized LED update system
+static bool led_updates_pending[MAX_FILAMENT_CHANNELS] = {false, false, false, false};
+static uint32_t last_led_update_time = 0;
+
+/**
+ * Process batched LED updates to reduce CPU overhead
+ * Only updates LEDs when changes are pending and enough time has passed
+ */
+void RGB_process_batched_updates() {
+    uint32_t current_time = millis();
+    
+    // Check if enough time has passed since last update
+    if (current_time - last_led_update_time < OPTIMIZED_LED_UPDATE_INTERVAL_MS) {
+        return;
+    }
+    
+    // Check if any updates are pending
+    bool any_updates_pending = false;
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        if (led_updates_pending[i]) {
+            any_updates_pending = true;
+            break;
+        }
+    }
+    
+    if (!any_updates_pending) {
+        return;
+    }
+    
+    // Process batched updates
+    #if ENABLE_PERFORMANCE_MONITORING
+    uint32_t start_time = micros();
+    performance_cpu_busy_start();
+    #endif
+    
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        if (led_updates_pending[i]) {
+            strip_channel[i].show();
+            led_updates_pending[i] = false;
+        }
+    }
+    
+    #if ENABLE_PERFORMANCE_MONITORING
+    performance_cpu_busy_end();
+    uint32_t end_time = micros();
+    performance_record_led_time(end_time - start_time);
+    #endif
+    
+    last_led_update_time = current_time;
+}
+#endif
 
 // Global variables for channel color storage
 uint8_t channel_colors[MAX_FILAMENT_CHANNELS][4] = {
@@ -72,6 +138,11 @@ uint8_t channel_runs_colors[MAX_FILAMENT_CHANNELS][2][3] = {
     {{3, 2, 1}, {3, 2, 1}}  // Channel 3
 };
 
+// Optimized LED update system
+#if ENABLE_LED_UPDATE_OPTIMIZATION
+// Variables already declared above
+#endif
+
 extern void BambuBUS_UART_Init();
 extern void send_uart(const unsigned char *data, uint16_t length);
 
@@ -81,6 +152,12 @@ void setup()
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_WWDG, DISABLE); // Disable watchdog
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
     GPIO_PinRemapConfig(GPIO_Remap_PD01, ENABLE);
+    
+    // Initialize performance monitoring first
+    #if ENABLE_PERFORMANCE_MONITORING
+    performance_init();
+    #endif
+    
     // Initialize RGB lights
     RGB_init();
     // Update RGB display
@@ -130,7 +207,13 @@ void Set_MC_RGB(uint8_t channel, int num, uint8_t R, uint8_t G, uint8_t B)
     // Update LED only if color has changed (reduces unnecessary updates)
     if (is_new_colors) {
         strip_channel[channel].setPixelColor(num, strip_channel[channel].Color(R, G, B));
-        strip_channel[channel].show(); // Display new color
+        
+        #if ENABLE_LED_UPDATE_OPTIMIZATION
+        // Mark channel for batch update instead of immediate update
+        led_updates_pending[channel] = true;
+        #else
+        strip_channel[channel].show(); // Immediate update (original behavior)
+        #endif
     }
 }
 
@@ -228,5 +311,15 @@ void loop()
         {
             Motion_control_run(error);
         }
+        
+        // Process batched LED updates for efficiency
+        #if ENABLE_LED_UPDATE_OPTIMIZATION
+        RGB_process_batched_updates();
+        #endif
+        
+        // Update performance monitoring
+        #if ENABLE_PERFORMANCE_MONITORING
+        performance_update();
+        #endif
     }
 }

@@ -1,5 +1,7 @@
 #include "Motion_control.h"
 #include "config.h"
+#include "performance_optimization.h"
+#include "advanced_optimization.h"
 #include <string.h>  // For memset, memcpy
 
 AS5600_soft_IIC_many MC_AS5600;
@@ -25,6 +27,13 @@ float MC_PULL_stu_raw[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};      ///< Raw pull 
 int MC_PULL_stu[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};            ///< Processed pull status
 float MC_ONLINE_key_stu_raw[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Raw online key sensor readings
 
+// Optimized sensor filtering
+#if ENABLE_OPTIMIZED_FILTERING
+OptimizedFilter pull_filters[MAX_FILAMENT_CHANNELS];
+OptimizedFilter online_filters[MAX_FILAMENT_CHANNELS];
+static bool filters_initialized = false;
+#endif
+
 // Channel status: 0=offline, 1=both micro-switches triggered, 2=outer triggered, 3=inner triggered  
 int MC_ONLINE_key_stu[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
 int MC_ONLINE_key_stu_prev[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Previous presence sensor state for edge detection
@@ -38,8 +47,14 @@ bool Assist_send_filament[MAX_FILAMENT_CHANNELS] = {false, false, false, false};
 bool pull_state_old = false; ///< Previous trigger state - True: not triggered, False: feeding complete
 bool is_backing_out = false;  ///< Currently backing out filament
 
+// Optimized timing: Use 32-bit timestamps instead of 64-bit (saves 16 bytes)
+#if USE_OPTIMIZED_TIMESTAMPS
+uint32_t Assist_filament_time[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
+const uint32_t Assist_send_time = ASSIST_SEND_TIME_MS; ///< Feed assist duration after outer trigger
+#else
 uint64_t Assist_filament_time[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0};
 const uint64_t Assist_send_time = ASSIST_SEND_TIME_MS; ///< Feed assist duration after outer trigger
+#endif
 
 // Retraction distances (in millimeters) - defined in config.h
 const float_t P1X_OUT_filament_meters = P1X_OUT_FILAMENT_MM;        ///< Internal retraction distance
@@ -51,9 +66,15 @@ const bool is_two = false; ///< Use dual micro-switches
 
 /**
  * Read ADC values for all channels and update sensor states
+ * Optimized version with performance monitoring and filtering
  */
 void MC_PULL_ONLINE_read()
 {
+    #if ENABLE_PERFORMANCE_MONITORING
+    uint32_t start_time = micros();
+    performance_cpu_busy_start();
+    #endif
+    
     float *data = ADC_DMA_get_value();
     
     // Store previous presence sensor states for edge detection
@@ -62,6 +83,17 @@ void MC_PULL_ONLINE_read()
     }
     
     // Map ADC channels to sensor readings (channels 3,2,1,0 in reverse order)
+    // Apply optimized filtering for noise reduction
+    #if ENABLE_OPTIMIZED_FILTERING
+    MC_PULL_stu_raw[3] = filter_update(&pull_filters[3], data[0]);
+    MC_ONLINE_key_stu_raw[3] = filter_update(&online_filters[3], data[1]);
+    MC_PULL_stu_raw[2] = filter_update(&pull_filters[2], data[2]);
+    MC_ONLINE_key_stu_raw[2] = filter_update(&online_filters[2], data[3]);
+    MC_PULL_stu_raw[1] = filter_update(&pull_filters[1], data[4]);
+    MC_ONLINE_key_stu_raw[1] = filter_update(&online_filters[1], data[5]);
+    MC_PULL_stu_raw[0] = filter_update(&pull_filters[0], data[6]);
+    MC_ONLINE_key_stu_raw[0] = filter_update(&online_filters[0], data[7]);
+    #else
     MC_PULL_stu_raw[3] = data[0];
     MC_ONLINE_key_stu_raw[3] = data[1];
     MC_PULL_stu_raw[2] = data[2];
@@ -70,6 +102,13 @@ void MC_PULL_ONLINE_read()
     MC_ONLINE_key_stu_raw[1] = data[5];
     MC_PULL_stu_raw[0] = data[6];
     MC_ONLINE_key_stu_raw[0] = data[7];
+    #endif
+    
+    #if ENABLE_PERFORMANCE_MONITORING
+    performance_cpu_busy_end();
+    uint32_t end_time = micros();
+    performance_record_sensor_time(end_time - start_time);
+    #endif
 
     // Process sensor readings for each channel
     for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++)
@@ -1713,6 +1752,18 @@ void Motion_control_init() // 初始化所有运动和传感器
     MC_PULL_ONLINE_init();
     MC_PULL_ONLINE_read();
     MOTOR_init();
+    
+    // Initialize optimized sensor filters
+    #if ENABLE_OPTIMIZED_FILTERING
+    if (!filters_initialized) {
+        for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+            filter_init(&pull_filters[i]);
+            filter_init(&online_filters[i]);
+        }
+        filters_initialized = true;
+        DEBUG_MY("Optimized sensor filters initialized\n");
+    }
+    #endif
     
     /*
     //这是一段阻塞的DEBUG代码

@@ -2,10 +2,18 @@
 #include "CRC16.h"
 #include "CRC8.h"
 #include "config.h"
+#include "performance_optimization.h"
+
 CRC16 crc_16;
 CRC8 crc_8;
 
+// Optimized buffer size: reduced from 1000 to 512 bytes (saves 488 bytes)
+// This is sufficient for BambuBus protocol maximum packet size
+#if ENABLE_MEMORY_OPTIMIZATION
+uint8_t BambuBus_data_buf[OPTIMIZED_BAMBU_BUS_BUFFER_SIZE];
+#else
 uint8_t BambuBus_data_buf[1000];
+#endif
 int BambuBus_have_data = 0;
 uint16_t BambuBus_address = 0;
 uint8_t BambuBus_AMS_num = 0; // 0-3 represents AMS identification as A, B, C, D
@@ -237,6 +245,9 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
             if (data != _RX_IRQ_crcx.calc()) // check error,return to waiting 0x3D
             {
                 _index = 0;
+                #if ENABLE_PERFORMANCE_MONITORING
+                performance_record_error(); // Track CRC errors
+                #endif
                 return;
             }
         }
@@ -247,9 +258,17 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
             memcpy(buf_X, BambuBus_data_buf, length);
             BambuBus_have_data = length;
         }
+        // Improved buffer overflow protection
+        #if ENABLE_MEMORY_OPTIMIZATION
+        if (_index >= OPTIMIZED_BAMBU_BUS_BUFFER_SIZE - 1) // recv error,reset with optimized buffer size
+        #else
         if (_index >= 999) // recv error,reset
+        #endif
         {
             _index = 0;
+            #if ENABLE_PERFORMANCE_MONITORING
+            performance_record_error(); // Track buffer overflow errors
+            #endif
         }
     }
 }
