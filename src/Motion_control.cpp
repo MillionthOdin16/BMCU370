@@ -2,6 +2,8 @@
 #include "config.h"
 #include "performance_optimization.h"
 #include "advanced_optimization.h"
+#include "smart_filament_management.h"
+#include "enhanced_led_interface.h"
 #include <string.h>  // For memset, memcpy
 
 AS5600_soft_IIC_many MC_AS5600;
@@ -613,6 +615,26 @@ void AS5600_distance_updata()//读取as5600，更新相关的数据
         // T = speed_filter_k / (T + speed_filter_k);
         speed_as5600[i] = speedx; // * (1 - T) + speed_as5600[i] * T; // mm/s
         add_filament_meters(i, distance_E / 1000);
+        
+        // Update smart filament management with current position and movement
+        float current_position_mm = distance_E; // Current movement in mm
+        bool is_feeding = (fabs(speedx) > 1.0f); // Consider feeding if speed > 1 mm/s
+        
+        // Update runout prediction with usage data
+        update_runout_prediction(i, current_position_mm);
+        
+        // Update jam detection with movement data
+        update_jam_detection(i, current_position_mm, is_feeding);
+        
+        // Update quality monitoring with speed data
+        // Use target speed of 30 mm/s as baseline for quality assessment
+        float target_speed = 30.0f;
+        update_quality_monitoring(i, fabs(speedx), target_speed);
+        
+        // Update usage analytics
+        if (fabs(distance_E) > 0.1f) { // Only count significant movement
+            update_usage_analytics(i, fabs(distance_E));
+        }
         
         // Update automatic direction learning with movement data
         if (AUTO_DIRECTION_LEARNING_ENABLED && fabs(distance_E) > 0.1) { // Only for significant movement

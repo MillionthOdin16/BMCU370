@@ -81,6 +81,21 @@
 #define ENABLE_OPTIMIZED_FILTERING      true
 
 // =============================================================================
+// Smart Filament Management Configuration 
+// =============================================================================
+
+// Enable smart filament management features
+#define ENABLE_SMART_FILAMENT_MANAGEMENT    true
+#define ENABLE_ENHANCED_LED_INTERFACE       true
+#define ENABLE_PRINT_OPTIMIZATION           true
+
+// Smart features configuration
+#define SMART_RUNOUT_PREDICTION_ENABLED     true
+#define SMART_JAM_DETECTION_ENABLED         true
+#define SMART_QUALITY_MONITORING_ENABLED    true
+#define ENHANCED_LED_PATTERNS_ENABLED       true
+
+// =============================================================================
 // Flash Memory Configuration
 // =============================================================================
 

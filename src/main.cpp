@@ -4,6 +4,8 @@
 #include "BambuBus.h"
 #include "Adafruit_NeoPixel.h"
 #include "performance_optimization.h"
+#include "smart_filament_management.h"
+#include "enhanced_led_interface.h"
 
 extern void debug_send_run();
 
@@ -158,6 +160,12 @@ void setup()
     performance_init();
     #endif
     
+    // Initialize smart filament management
+    smart_filament_init();
+    
+    // Initialize enhanced LED interface
+    enhanced_led_init();
+    
     // Initialize RGB lights
     RGB_init();
     // Update RGB display
@@ -311,6 +319,15 @@ void loop()
         {
             Motion_control_run(error);
         }
+        
+        // Update smart filament management
+        smart_filament_update();
+        
+        // Update enhanced LED interface
+        enhanced_led_update();
+        
+        // Update smart status display
+        update_smart_status_display();
         
         // Process batched LED updates for efficiency
         #if ENABLE_LED_UPDATE_OPTIMIZATION
