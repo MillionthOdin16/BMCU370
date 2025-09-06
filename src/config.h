@@ -104,6 +104,27 @@
 #define PRESSURE_UPDATE_INTERVAL_MS     25      ///< Pressure measurement and control update interval (ms) - 40 Hz
 #define PRESSURE_TIMING_CONTROL_ENABLED true    ///< Enable pressure control timing limits
 
+// Advanced signal filtering for pressure readings
+#define PRESSURE_FILTERING_ENABLED      true    ///< Enable advanced signal filtering for pressure readings
+#define PRESSURE_FILTER_WINDOW_SIZE     8       ///< Moving average filter window size (4-16 recommended)
+#define PRESSURE_OUTLIER_REJECTION      true    ///< Enable outlier rejection for spurious readings
+#define PRESSURE_OUTLIER_THRESHOLD      0.15f   ///< Outlier threshold as fraction of sensor range (0.1-0.2 recommended)
+#define PRESSURE_LOWPASS_FILTER_ALPHA   0.3f    ///< Low-pass filter coefficient (0.1-0.5, lower = more filtering)
+
+// Dynamic update rate adaptation
+#define PRESSURE_ADAPTIVE_UPDATE_RATE   true    ///< Enable adaptive update rate based on system state
+#define PRESSURE_UPDATE_RATE_IDLE_MS    50      ///< Slower update rate during idle periods (20 Hz)
+#define PRESSURE_UPDATE_RATE_ACTIVE_MS  20      ///< Faster update rate during active operations (50 Hz)
+#define PRESSURE_UPDATE_RATE_CRITICAL_MS 10     ///< Emergency fast update rate for critical deviations (100 Hz)
+
+// Enhanced diagnostics and health monitoring
+#define PRESSURE_DIAGNOSTICS_ENABLED    true    ///< Enable pressure sensor health monitoring and diagnostics
+#define PRESSURE_DRIFT_MONITORING       true    ///< Monitor sensor drift over time
+#define PRESSURE_DRIFT_WARNING_THRESHOLD 0.1f   ///< Threshold for sensor drift warning (volts)
+#define PRESSURE_PERFORMANCE_METRICS    true    ///< Collect pressure control performance metrics
+#define PRESSURE_FAULT_DETECTION        true    ///< Enable automatic fault detection and recovery
+#define PRESSURE_STUCK_READING_THRESHOLD 100    ///< Number of identical readings to consider sensor stuck
+
 // Timing constants (in milliseconds)
 #define ASSIST_SEND_TIME_MS     1200        ///< Filament send assist duration
 #define RGB_UPDATE_INTERVAL_MS  3000        ///< RGB update interval for error states

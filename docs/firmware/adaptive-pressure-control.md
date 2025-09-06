@@ -4,6 +4,8 @@
 
 The Adaptive Pressure Control System addresses the fundamental issue of static pressure thresholds in filament feeding. Instead of using fixed voltage thresholds (1.45V-1.85V), the system learns individual sensor characteristics for each channel and dynamically adjusts control parameters based on sensor variations.
 
+**Version 2.0** adds advanced signal filtering, dynamic update rate adaptation, and comprehensive diagnostics for enhanced stability and monitoring.
+
 ## Problem Solved
 
 ### Original Issue
@@ -16,6 +18,9 @@ The Adaptive Pressure Control System addresses the fundamental issue of static p
 
 ### Solution Benefits
 - **Individualized Control**: Each channel adapts to its specific sensor characteristics
+- **Advanced Filtering**: Noise reduction and outlier rejection for stable readings
+- **Smart Update Rates**: Adaptive timing based on system activity (20-100 Hz)
+- **Health Monitoring**: Sensor diagnostics and fault detection
 - **Improved Responsiveness**: Smaller deadbands and enhanced PID control prevent pressure drift
 - **Automatic Learning**: No manual calibration required - learns during normal operation
 - **Backward Compatibility**: Falls back to original static thresholds if calibration unavailable
@@ -28,18 +33,39 @@ The Adaptive Pressure Control System addresses the fundamental issue of static p
 - Calculates dynamic thresholds based on sensor properties
 - Stores calibration data in flash memory for persistence
 
-### 2. Dynamic Threshold Calculation
+### 2. Advanced Signal Filtering (New in v2.0)
+- **Moving Average Filter**: 8-sample window for noise reduction
+- **Outlier Rejection**: Automatically rejects spurious readings
+- **Low-Pass Filtering**: Configurable alpha coefficient for stability
+- **Stability Detection**: Monitors reading consistency
+
+### 3. Dynamic Update Rate Control (New in v2.0)
+- **Adaptive Timing**: Adjusts update rate based on system activity
+  - Idle: 20 Hz (50ms intervals) for power efficiency
+  - Active: 50 Hz (20ms intervals) during feeding operations
+  - Critical: 100 Hz (10ms intervals) for emergency response
+- **Activity Detection**: Monitors feeding state and pressure deviations
+- **Smooth Transitions**: Gradual rate changes prevent system shock
+
+### 4. Enhanced Diagnostics (New in v2.0)
+- **Sensor Health Monitoring**: Continuous assessment of sensor condition
+- **Drift Detection**: Monitors long-term sensor calibration drift
+- **Stuck Sensor Detection**: Identifies sensors with identical readings
+- **Performance Metrics**: Tracks average/maximum errors and correction counts
+- **Fault Recovery**: Automatic detection and logging of sensor issues
+
+### 5. Dynamic Threshold Calculation
 - High/low pressure thresholds calculated as percentage of sensor range
 - Deadband around zero point scaled to sensor characteristics
 - Individual sensor variations automatically compensated
 
-### 3. Enhanced Pressure Control
+### 6. Enhanced Pressure Control
 - More responsive PID control with configurable scaling
 - Active pressure correction when drift is detected
 - Smaller deadbands for faster response to pressure changes
 - Maximum correction limits to prevent excessive motor force
 
-### 4. Automatic Calibration
+### 7. Automatic Calibration
 - Calibrates sensors during idle periods when no filament present
 - Periodic recalibration to maintain accuracy
 - Manual calibration functions for testing and debugging
@@ -80,6 +106,33 @@ All parameters are defined in `src/config.h`:
 ```cpp
 #define PRESSURE_UPDATE_INTERVAL_MS     25      // Pressure update interval (ms) - 40 Hz
 #define PRESSURE_TIMING_CONTROL_ENABLED true    // Enable timing control for stability
+```
+
+### Advanced Signal Filtering (New in v2.0)
+```cpp
+#define PRESSURE_FILTERING_ENABLED      true    // Enable signal filtering
+#define PRESSURE_FILTER_WINDOW_SIZE     8       // Moving average window (4-16)
+#define PRESSURE_OUTLIER_REJECTION      true    // Enable outlier rejection
+#define PRESSURE_OUTLIER_THRESHOLD      0.15f   // Outlier threshold (0.1-0.2)
+#define PRESSURE_LOWPASS_FILTER_ALPHA   0.3f    // Low-pass coefficient (0.1-0.5)
+```
+
+### Dynamic Update Rate Control (New in v2.0)
+```cpp
+#define PRESSURE_ADAPTIVE_UPDATE_RATE   true    // Enable adaptive update rates
+#define PRESSURE_UPDATE_RATE_IDLE_MS    50      // Idle rate: 20 Hz
+#define PRESSURE_UPDATE_RATE_ACTIVE_MS  20      // Active rate: 50 Hz
+#define PRESSURE_UPDATE_RATE_CRITICAL_MS 10     // Critical rate: 100 Hz
+```
+
+### Enhanced Diagnostics (New in v2.0)
+```cpp
+#define PRESSURE_DIAGNOSTICS_ENABLED    true    // Enable diagnostics
+#define PRESSURE_DRIFT_MONITORING       true    // Monitor sensor drift
+#define PRESSURE_DRIFT_WARNING_THRESHOLD 0.1f   // Drift warning threshold (volts)
+#define PRESSURE_PERFORMANCE_METRICS    true    // Collect performance metrics
+#define PRESSURE_FAULT_DETECTION        true    // Enable fault detection
+#define PRESSURE_STUCK_READING_THRESHOLD 100    // Stuck sensor detection count
 ```
 
 ## Operation Modes

@@ -175,6 +175,54 @@ struct PressureCorrectionState
     float initial_error;       ///< Initial pressure error when correction started
 } pressure_correction[MAX_FILAMENT_CHANNELS];
 
+// Advanced signal filtering state for each channel
+struct PressureFilterState
+{
+    float filter_buffer[PRESSURE_FILTER_WINDOW_SIZE]; ///< Circular buffer for moving average
+    uint8_t buffer_index;           ///< Current index in circular buffer
+    uint8_t sample_count;           ///< Number of samples in buffer (for initialization)
+    float filtered_value;           ///< Current filtered pressure value
+    float lowpass_value;            ///< Low-pass filtered value
+    float last_raw_value;           ///< Previous raw reading for change detection
+    bool is_stable;                 ///< Whether pressure reading is stable
+    uint16_t stability_counter;     ///< Counter for stability detection
+} pressure_filter[MAX_FILAMENT_CHANNELS];
+
+// Dynamic update rate control state
+struct PressureUpdateRateState
+{
+    bool active_feeding;            ///< Currently in active feeding mode
+    bool critical_pressure;         ///< Critical pressure deviation detected
+    uint64_t last_update_time;      ///< Last pressure update timestamp
+    uint32_t current_interval_ms;   ///< Current update interval
+    uint16_t idle_counter;          ///< Counter for idle period detection
+} pressure_update_rate;
+
+// Pressure diagnostics and health monitoring state for each channel
+struct PressureDiagnosticsState
+{
+    bool sensor_healthy;            ///< Overall sensor health status
+    float initial_zero_point;       ///< Initial zero point for drift calculation
+    float current_drift;            ///< Current sensor drift from initial calibration
+    uint64_t last_diagnostic_time;  ///< Last diagnostic check timestamp
+    
+    // Stuck sensor detection
+    float last_readings[5];         ///< Last few readings for stuck detection
+    uint8_t reading_index;          ///< Index for circular buffer
+    uint16_t identical_count;       ///< Count of identical consecutive readings
+    
+    // Performance metrics
+    float total_error;              ///< Cumulative pressure error
+    float max_error;                ///< Maximum pressure error observed
+    uint32_t measurement_count;     ///< Total number of measurements
+    uint32_t correction_count;      ///< Number of pressure corrections applied
+    
+    // Fault detection
+    bool drift_warning;             ///< Drift warning flag
+    bool stuck_warning;             ///< Stuck sensor warning flag
+    uint64_t last_fault_time;       ///< Last time a fault was detected
+} pressure_diagnostics[MAX_FILAMENT_CHANNELS];
+
 struct alignas(4) Motion_control_save_struct
 {
     int Motion_control_dir[4];
@@ -899,25 +947,70 @@ void motor_motion_run(int error)
 // 运动控制函数
 void Motion_control_run(int error)
 {
-    // Pressure control timing - limit update rate for better stability
-    static uint64_t last_pressure_update = 0;
-    uint64_t current_time = get_time64();
+    // Enhanced pressure control timing with adaptive update rate
     bool should_update_pressure = true;
     
-    if (PRESSURE_TIMING_CONTROL_ENABLED) {
-        should_update_pressure = (current_time - last_pressure_update) >= PRESSURE_UPDATE_INTERVAL_MS;
-        if (should_update_pressure) {
-            last_pressure_update = current_time;
+    if (PRESSURE_TIMING_CONTROL_ENABLED || PRESSURE_ADAPTIVE_UPDATE_RATE) {
+        should_update_pressure = should_update_pressure_now();
+    }
+    
+    // Determine system activity for adaptive update rate
+    if (PRESSURE_ADAPTIVE_UPDATE_RATE) {
+        bool active_feeding = false;
+        bool critical_pressure = false;
+        
+        // Check if any channel is actively feeding or has critical pressure
+        for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+            if (get_filament_motion(i) != AMS_filament_motion::idle) {
+                active_feeding = true;
+            }
+            
+            // Check for critical pressure deviation
+            if (ADAPTIVE_PRESSURE_ENABLED && pressure_calibration[i].is_calibrated) {
+                float pressure = get_filtered_pressure(i);
+                float deviation = fabsf(pressure - pressure_calibration[i].zero_point);
+                if (deviation > PRESSURE_DRIFT_THRESHOLD * 2.0f) { // Critical threshold
+                    critical_pressure = true;
+                }
+            }
         }
+        
+        update_system_activity_state(active_feeding, critical_pressure);
     }
     
     // Update pressure readings at controlled rate
     if (should_update_pressure) {
         MC_PULL_ONLINE_read();
+        
+        // Apply signal filtering to pressure readings
+        if (PRESSURE_FILTERING_ENABLED) {
+            for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+                float raw_pressure = MC_PULL_stu_raw[i];
+                float filtered_pressure = pressure_filter_update(i, raw_pressure);
+                
+                // Update diagnostics with raw and filtered values
+                if (PRESSURE_DIAGNOSTICS_ENABLED) {
+                    pressure_diagnostics_update(i, raw_pressure, filtered_pressure);
+                }
+                
+                // Store filtered value back for use by other systems
+                MC_PULL_stu_raw[i] = filtered_pressure;
+            }
+        } else if (PRESSURE_DIAGNOSTICS_ENABLED) {
+            // Update diagnostics even if filtering is disabled
+            for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+                pressure_diagnostics_update(i, MC_PULL_stu_raw[i], MC_PULL_stu_raw[i]);
+            }
+        }
 
         // Run automatic pressure sensor calibration if enabled
         if (!error && ADAPTIVE_PRESSURE_ENABLED) {
             pressure_sensor_auto_calibrate();
+        }
+        
+        // Run periodic diagnostics checks
+        if (PRESSURE_DIAGNOSTICS_ENABLED) {
+            pressure_diagnostics_check_all_channels();
         }
     }
 
@@ -1697,6 +1790,449 @@ void pressure_sensor_calibrate_channel(int channel)
     DEBUG_MY("V\n");
 }
 
+// =============================================================================
+// Advanced Signal Filtering Functions
+// =============================================================================
+
+/**
+ * Initialize pressure signal filtering system
+ */
+void pressure_filter_init()
+{
+    if (!PRESSURE_FILTERING_ENABLED) {
+        return;
+    }
+    
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        memset(&pressure_filter[i], 0, sizeof(PressureFilterState));
+        pressure_filter[i].filtered_value = 0.0f;
+        pressure_filter[i].lowpass_value = 0.0f;
+        pressure_filter[i].is_stable = false;
+    }
+}
+
+/**
+ * Update pressure filter with new raw reading
+ * @param channel Channel number (0-3)
+ * @param raw_value Raw pressure reading in volts
+ * @return Filtered pressure value
+ */
+float pressure_filter_update(int channel, float raw_value)
+{
+    if (!PRESSURE_FILTERING_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return raw_value;
+    }
+    
+    PressureFilterState* filter = &pressure_filter[channel];
+    
+    // Outlier rejection - compare against current filtered value
+    if (PRESSURE_OUTLIER_REJECTION && filter->sample_count >= 3) {
+        float deviation = fabsf(raw_value - filter->filtered_value);
+        float sensor_range = 3.0f; // Default range, use calibrated range if available
+        
+        if (ADAPTIVE_PRESSURE_ENABLED && pressure_calibration[channel].is_calibrated) {
+            sensor_range = pressure_calibration[channel].positive_range + pressure_calibration[channel].negative_range;
+        }
+        
+        float outlier_threshold = sensor_range * PRESSURE_OUTLIER_THRESHOLD;
+        
+        if (deviation > outlier_threshold) {
+            // Reject outlier, return previous filtered value
+            return filter->filtered_value;
+        }
+    }
+    
+    // Add to moving average buffer
+    filter->filter_buffer[filter->buffer_index] = raw_value;
+    filter->buffer_index = (filter->buffer_index + 1) % PRESSURE_FILTER_WINDOW_SIZE;
+    
+    if (filter->sample_count < PRESSURE_FILTER_WINDOW_SIZE) {
+        filter->sample_count++;
+    }
+    
+    // Calculate moving average
+    float sum = 0.0f;
+    for (int i = 0; i < filter->sample_count; i++) {
+        sum += filter->filter_buffer[i];
+    }
+    float moving_average = sum / filter->sample_count;
+    
+    // Apply low-pass filter
+    if (filter->sample_count == 1) {
+        filter->lowpass_value = moving_average;
+    } else {
+        filter->lowpass_value = PRESSURE_LOWPASS_FILTER_ALPHA * moving_average + 
+                               (1.0f - PRESSURE_LOWPASS_FILTER_ALPHA) * filter->lowpass_value;
+    }
+    
+    filter->filtered_value = filter->lowpass_value;
+    
+    // Update stability detection
+    float change = fabsf(raw_value - filter->last_raw_value);
+    if (change < 0.01f) { // Less than 10mV change
+        filter->stability_counter++;
+        if (filter->stability_counter >= 5) {
+            filter->is_stable = true;
+        }
+    } else {
+        filter->stability_counter = 0;
+        filter->is_stable = false;
+    }
+    
+    filter->last_raw_value = raw_value;
+    return filter->filtered_value;
+}
+
+/**
+ * Reset pressure filter for specific channel
+ */
+void pressure_filter_reset_channel(int channel)
+{
+    if (!PRESSURE_FILTERING_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    memset(&pressure_filter[channel], 0, sizeof(PressureFilterState));
+}
+
+/**
+ * Reset all pressure filters
+ */
+void pressure_filter_reset_all()
+{
+    if (!PRESSURE_FILTERING_ENABLED) {
+        return;
+    }
+    
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        pressure_filter_reset_channel(i);
+    }
+}
+
+/**
+ * Get current filtered pressure value
+ */
+float get_filtered_pressure(int channel)
+{
+    if (!PRESSURE_FILTERING_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return MC_PULL_stu_raw[channel];
+    }
+    
+    return pressure_filter[channel].filtered_value;
+}
+
+/**
+ * Check if pressure reading is stable
+ */
+bool is_pressure_reading_stable(int channel)
+{
+    if (!PRESSURE_FILTERING_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return false;
+    }
+    
+    return pressure_filter[channel].is_stable;
+}
+
+// =============================================================================
+// Dynamic Update Rate Control Functions
+// =============================================================================
+
+/**
+ * Initialize dynamic update rate control system
+ */
+void pressure_update_rate_init()
+{
+    if (!PRESSURE_ADAPTIVE_UPDATE_RATE) {
+        return;
+    }
+    
+    memset(&pressure_update_rate, 0, sizeof(PressureUpdateRateState));
+    pressure_update_rate.current_interval_ms = PRESSURE_UPDATE_INTERVAL_MS;
+    pressure_update_rate.last_update_time = get_time64();
+}
+
+/**
+ * Get current adaptive update interval
+ */
+uint32_t get_adaptive_update_interval_ms()
+{
+    if (!PRESSURE_ADAPTIVE_UPDATE_RATE) {
+        return PRESSURE_UPDATE_INTERVAL_MS;
+    }
+    
+    return pressure_update_rate.current_interval_ms;
+}
+
+/**
+ * Update system activity state for adaptive update rate
+ */
+void update_system_activity_state(bool active_feeding, bool critical_pressure)
+{
+    if (!PRESSURE_ADAPTIVE_UPDATE_RATE) {
+        return;
+    }
+    
+    pressure_update_rate.active_feeding = active_feeding;
+    pressure_update_rate.critical_pressure = critical_pressure;
+    
+    // Determine appropriate update interval
+    if (critical_pressure) {
+        pressure_update_rate.current_interval_ms = PRESSURE_UPDATE_RATE_CRITICAL_MS;
+        pressure_update_rate.idle_counter = 0;
+    } else if (active_feeding) {
+        pressure_update_rate.current_interval_ms = PRESSURE_UPDATE_RATE_ACTIVE_MS;
+        pressure_update_rate.idle_counter = 0;
+    } else {
+        // Gradually transition to idle rate
+        pressure_update_rate.idle_counter++;
+        if (pressure_update_rate.idle_counter >= 10) { // After 10 inactive cycles
+            pressure_update_rate.current_interval_ms = PRESSURE_UPDATE_RATE_IDLE_MS;
+        }
+    }
+}
+
+/**
+ * Check if pressure should be updated now
+ */
+bool should_update_pressure_now()
+{
+    if (!PRESSURE_TIMING_CONTROL_ENABLED && !PRESSURE_ADAPTIVE_UPDATE_RATE) {
+        return true;
+    }
+    
+    uint64_t current_time = get_time64();
+    uint32_t interval_ms = PRESSURE_ADAPTIVE_UPDATE_RATE ? 
+                          get_adaptive_update_interval_ms() : 
+                          PRESSURE_UPDATE_INTERVAL_MS;
+    
+    bool should_update = (current_time - pressure_update_rate.last_update_time) >= interval_ms;
+    
+    if (should_update) {
+        pressure_update_rate.last_update_time = current_time;
+    }
+    
+    return should_update;
+}
+
+// =============================================================================
+// Pressure Diagnostics and Health Monitoring Functions
+// =============================================================================
+
+/**
+ * Initialize pressure diagnostics and health monitoring system
+ */
+void pressure_diagnostics_init()
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED) {
+        return;
+    }
+    
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        memset(&pressure_diagnostics[i], 0, sizeof(PressureDiagnosticsState));
+        pressure_diagnostics[i].sensor_healthy = true;
+        pressure_diagnostics[i].last_diagnostic_time = get_time64();
+        
+        // Initialize with current calibrated zero point if available
+        if (ADAPTIVE_PRESSURE_ENABLED && pressure_calibration[i].is_calibrated) {
+            pressure_diagnostics[i].initial_zero_point = pressure_calibration[i].zero_point;
+        }
+    }
+}
+
+/**
+ * Update diagnostics with new pressure reading
+ * @param channel Channel number (0-3)
+ * @param raw_value Raw pressure reading
+ * @param filtered_value Filtered pressure reading
+ */
+void pressure_diagnostics_update(int channel, float raw_value, float filtered_value)
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    PressureDiagnosticsState* diag = &pressure_diagnostics[channel];
+    uint64_t current_time = get_time64();
+    
+    // Update measurement count
+    diag->measurement_count++;
+    
+    // Check for stuck sensor - compare with recent readings
+    bool is_stuck = true;
+    diag->last_readings[diag->reading_index] = raw_value;
+    
+    for (int i = 1; i < 5; i++) {
+        int idx = (diag->reading_index - i + 5) % 5;
+        if (fabsf(raw_value - diag->last_readings[idx]) > 0.005f) { // 5mV tolerance
+            is_stuck = false;
+            break;
+        }
+    }
+    
+    if (is_stuck && diag->measurement_count >= 5) {
+        diag->identical_count++;
+        if (diag->identical_count >= PRESSURE_STUCK_READING_THRESHOLD) {
+            diag->stuck_warning = true;
+        }
+    } else {
+        diag->identical_count = 0;
+        diag->stuck_warning = false;
+    }
+    
+    diag->reading_index = (diag->reading_index + 1) % 5;
+    
+    // Calculate pressure error if calibrated
+    if (ADAPTIVE_PRESSURE_ENABLED && pressure_calibration[channel].is_calibrated) {
+        float error = fabsf(filtered_value - pressure_calibration[channel].zero_point);
+        diag->total_error += error;
+        
+        if (error > diag->max_error) {
+            diag->max_error = error;
+        }
+        
+        // Monitor sensor drift
+        if (PRESSURE_DRIFT_MONITORING) {
+            diag->current_drift = fabsf(pressure_calibration[channel].zero_point - diag->initial_zero_point);
+            
+            if (diag->current_drift > PRESSURE_DRIFT_WARNING_THRESHOLD) {
+                diag->drift_warning = true;
+            }
+        }
+    }
+    
+    // Update overall health status
+    diag->sensor_healthy = !diag->stuck_warning && !diag->drift_warning;
+    
+    // Perform periodic diagnostic checks (every 5 seconds)
+    if (current_time - diag->last_diagnostic_time >= 5000) {
+        diag->last_diagnostic_time = current_time;
+        
+        if (!diag->sensor_healthy && PRESSURE_FAULT_DETECTION) {
+            DEBUG_MY("Pressure sensor fault detected on channel ");
+            DEBUG_float(channel, 0);
+            if (diag->stuck_warning) DEBUG_MY(" (stuck)");
+            if (diag->drift_warning) DEBUG_MY(" (drift)");
+            DEBUG_MY("\n");
+            
+            diag->last_fault_time = current_time;
+        }
+    }
+}
+
+/**
+ * Check if pressure sensor is healthy
+ */
+bool is_pressure_sensor_healthy(int channel)
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return true; // Default to healthy if diagnostics disabled
+    }
+    
+    return pressure_diagnostics[channel].sensor_healthy;
+}
+
+/**
+ * Check if pressure sensor appears stuck
+ */
+bool is_pressure_sensor_stuck(int channel)
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return false;
+    }
+    
+    return pressure_diagnostics[channel].stuck_warning;
+}
+
+/**
+ * Get current sensor drift amount
+ */
+float get_pressure_sensor_drift(int channel)
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED || !PRESSURE_DRIFT_MONITORING || 
+        channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return 0.0f;
+    }
+    
+    return pressure_diagnostics[channel].current_drift;
+}
+
+/**
+ * Get performance metrics for a channel
+ */
+void get_pressure_performance_metrics(int channel, float* avg_error, float* max_error, uint32_t* correction_count)
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED || !PRESSURE_PERFORMANCE_METRICS || 
+        channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        if (avg_error) *avg_error = 0.0f;
+        if (max_error) *max_error = 0.0f;
+        if (correction_count) *correction_count = 0;
+        return;
+    }
+    
+    PressureDiagnosticsState* diag = &pressure_diagnostics[channel];
+    
+    if (avg_error) {
+        *avg_error = diag->measurement_count > 0 ? diag->total_error / diag->measurement_count : 0.0f;
+    }
+    if (max_error) {
+        *max_error = diag->max_error;
+    }
+    if (correction_count) {
+        *correction_count = diag->correction_count;
+    }
+}
+
+/**
+ * Reset diagnostics for a specific channel
+ */
+void reset_pressure_diagnostics(int channel)
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    memset(&pressure_diagnostics[channel], 0, sizeof(PressureDiagnosticsState));
+    pressure_diagnostics[channel].sensor_healthy = true;
+    pressure_diagnostics[channel].last_diagnostic_time = get_time64();
+}
+
+/**
+ * Check diagnostics for all channels and log any issues
+ */
+void pressure_diagnostics_check_all_channels()
+{
+    if (!PRESSURE_DIAGNOSTICS_ENABLED) {
+        return;
+    }
+    
+    static uint64_t last_check = 0;
+    uint64_t current_time = get_time64();
+    
+    // Check every 10 seconds
+    if (current_time - last_check < 10000) {
+        return;
+    }
+    last_check = current_time;
+    
+    for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+        if (!is_pressure_sensor_healthy(i)) {
+            float avg_error, max_error;
+            uint32_t corrections;
+            get_pressure_performance_metrics(i, &avg_error, &max_error, &corrections);
+            
+            DEBUG_MY("CH");
+            DEBUG_float(i, 0);
+            DEBUG_MY(" health: avg_err=");
+            DEBUG_float(avg_error, 3);
+            DEBUG_MY("V, max_err=");
+            DEBUG_float(max_error, 3);
+            DEBUG_MY("V, drift=");
+            DEBUG_float(get_pressure_sensor_drift(i), 3);
+            DEBUG_MY("V\n");
+        }
+    }
+}
+
 /**
  * Automatically calibrate pressure sensors during idle periods
  * Called periodically during system operation
@@ -2134,6 +2670,21 @@ void Motion_control_init() // 初始化所有运动和传感器
             
             // Initialize pressure correction state
             memset(&pressure_correction[i], 0, sizeof(PressureCorrectionState));
+        }
+        
+        // Initialize advanced signal filtering
+        if (PRESSURE_FILTERING_ENABLED) {
+            pressure_filter_init();
+        }
+        
+        // Initialize dynamic update rate control
+        if (PRESSURE_ADAPTIVE_UPDATE_RATE) {
+            pressure_update_rate_init();
+        }
+        
+        // Initialize diagnostics and health monitoring
+        if (PRESSURE_DIAGNOSTICS_ENABLED) {
+            pressure_diagnostics_init();
         }
     }
     
