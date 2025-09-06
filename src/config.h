@@ -61,10 +61,40 @@
 // Motion Control Configuration
 // =============================================================================
 
-// Voltage thresholds for filament detection (in Volts)
-#define PULL_VOLTAGE_HIGH       1.85f       ///< High pressure threshold (red LED)
-#define PULL_VOLTAGE_LOW        1.45f       ///< Low pressure threshold (blue LED)
+// Legacy voltage thresholds for filament detection (in Volts) - used as fallback
+#define PULL_VOLTAGE_HIGH       1.85f       ///< High pressure threshold (red LED) - fallback
+#define PULL_VOLTAGE_LOW        1.45f       ///< Low pressure threshold (blue LED) - fallback
 #define PULL_VOLTAGE_SEND_MAX   1.7f        ///< Maximum voltage for sending filament
+
+// =============================================================================
+// Adaptive Pressure Control Configuration
+// =============================================================================
+
+/**
+ * Adaptive Pressure Control System
+ * 
+ * This system learns individual sensor characteristics for each channel and
+ * dynamically adjusts pressure thresholds based on sensor variations.
+ * This provides more responsive and accurate filament pressure control.
+ */
+#define ADAPTIVE_PRESSURE_ENABLED       true    ///< Enable adaptive pressure control system
+#define PRESSURE_DEADBAND_SCALE         0.15f   ///< Deadband around zero as fraction of sensor range (0.1-0.3 recommended)
+#define PRESSURE_HIGH_THRESHOLD_SCALE   0.25f   ///< High pressure threshold as fraction of sensor range (0.2-0.4 recommended)
+#define PRESSURE_LOW_THRESHOLD_SCALE    0.25f   ///< Low pressure threshold as fraction of sensor range (0.2-0.4 recommended)
+
+// Sensor calibration parameters
+#define PRESSURE_CALIBRATION_SAMPLES    50      ///< Number of samples for initial calibration (30-100 recommended)
+#define PRESSURE_CALIBRATION_TIME_MS    5000    ///< Maximum time for calibration in milliseconds
+#define PRESSURE_RANGE_MIN_VOLTAGE      0.2f    ///< Minimum expected sensor range in volts
+#define PRESSURE_RANGE_MAX_VOLTAGE      2.8f    ///< Maximum expected sensor range in volts
+#define PRESSURE_ZERO_TOLERANCE         0.05f   ///< Tolerance for zero point detection in volts
+#define PRESSURE_AUTO_RECALIBRATION     true    ///< Enable automatic recalibration during idle periods
+
+// Enhanced pressure control parameters
+#define PRESSURE_CONTROL_RESPONSIVE     true    ///< Enable more responsive pressure control
+#define PRESSURE_CONTROL_DEADBAND_SMALL 0.02f   ///< Small deadband for responsive control in volts
+#define PRESSURE_CONTROL_PID_P_SCALE    2.0f    ///< Scaling factor for PID proportional gain
+#define PRESSURE_CONTROL_MAX_CORRECTION 800     ///< Maximum motor correction value for pressure control
 
 // Timing constants (in milliseconds)
 #define ASSIST_SEND_TIME_MS     1200        ///< Filament send assist duration

@@ -6,6 +6,14 @@ extern void Motion_control_init();
 extern void Motion_control_set_PWM(uint8_t CHx, int PWM);
 extern void Motion_control_run(int error);
 
+// Adaptive pressure control functions
+extern void pressure_sensor_calibrate_channel(int channel);
+extern void pressure_sensor_auto_calibrate();
+extern void pressure_sensor_reset_calibration(int channel);
+extern float get_dynamic_pressure_threshold_high(int channel);
+extern float get_dynamic_pressure_threshold_low(int channel);
+extern bool is_pressure_in_deadband(int channel, float pressure);
+
 // Automatic direction learning functions
 extern void start_direction_learning(int channel, int commanded_direction);
 extern void update_direction_learning(int channel, float movement_delta);

@@ -85,15 +85,19 @@ void MC_PULL_ONLINE_read()
             DEBUG_MY("   \n");
         }
         */
-        if (MC_PULL_stu_raw[i] > PULL_voltage_up) // 大于1.85V,表示压力过高
+        // Use adaptive pressure thresholds if available, otherwise fall back to static values
+        float pressure_high_threshold = get_dynamic_pressure_threshold_high(i);
+        float pressure_low_threshold = get_dynamic_pressure_threshold_low(i);
+        
+        if (MC_PULL_stu_raw[i] > pressure_high_threshold) // 压力过高
         {
             MC_PULL_stu[i] = 1;
         }
-        else if (MC_PULL_stu_raw[i] < PULL_voltage_down) // 小于1.45V，表示压力过低
+        else if (MC_PULL_stu_raw[i] < pressure_low_threshold) // 压力过低
         {
             MC_PULL_stu[i] = -1;
         }
-        else // 1.4~1.7之间，在正常误差范围内，无需动作
+        else // 在正常误差范围内，无需动作
         {
             MC_PULL_stu[i] = 0;
         }
@@ -149,10 +153,24 @@ void MC_PULL_ONLINE_read()
 
 #define PWM_lim 1000
 
+// Adaptive pressure sensor calibration data for each channel
+struct alignas(4) PressureSensorCalibration
+{
+    float zero_point;           ///< Sensor voltage when no pressure is applied (neutral position)
+    float positive_range;       ///< Maximum positive pressure voltage range from zero point
+    float negative_range;       ///< Maximum negative pressure voltage range from zero point
+    float deadband_low;         ///< Dynamic low pressure threshold
+    float deadband_high;        ///< Dynamic high pressure threshold
+    uint16_t calibration_samples; ///< Number of samples used for calibration
+    bool is_calibrated;         ///< Whether this channel has been calibrated
+    uint64_t last_calibration_time; ///< Last time calibration was performed
+} pressure_calibration[MAX_FILAMENT_CHANNELS];
+
 struct alignas(4) Motion_control_save_struct
 {
     int Motion_control_dir[4];
     bool auto_learned[4];  ///< Whether direction was learned automatically vs static correction
+    PressureSensorCalibration pressure_cal[4]; ///< Per-channel pressure sensor calibration
     int check = 0x40614061;
 } Motion_control_data_save;
 
@@ -202,6 +220,12 @@ bool Motion_control_read()
 }
 void Motion_control_save()
 {
+    // Copy current pressure calibration data to save structure
+    if (ADAPTIVE_PRESSURE_ENABLED) {
+        for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+            Motion_control_data_save.pressure_cal[i] = pressure_calibration[i];
+        }
+    }
     Flash_saves(&Motion_control_data_save, sizeof(Motion_control_save_struct), Motion_control_save_flash_addr);
 }
 
@@ -324,34 +348,57 @@ public:
     float _get_x_by_pressure(float pressure_voltage, float control_voltage, float time_E, pressure_control_enum control_type)
     {
         float x=0;
+        
+        // Get adaptive control voltage (zero point) if available
+        float adaptive_control_voltage = control_voltage;
+        if (ADAPTIVE_PRESSURE_ENABLED && pressure_calibration[CHx].is_calibrated) {
+            adaptive_control_voltage = pressure_calibration[CHx].zero_point;
+        }
+        
         switch (control_type)
         {
         case pressure_control_enum::all: // 全范围控制
         {
-            x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - control_voltage, time_E);
+            x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - adaptive_control_voltage, time_E);
             break;
         }
         case pressure_control_enum::less_pressure: // 仅低压控制
         {
-            if (pressure_voltage < control_voltage)
+            if (pressure_voltage < adaptive_control_voltage)
             {
-                x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - control_voltage, time_E);
+                x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - adaptive_control_voltage, time_E);
             }
             break;
         }
         case pressure_control_enum::over_pressure: // 仅高压控制
         {
-            if (pressure_voltage > control_voltage)
+            if (pressure_voltage > adaptive_control_voltage)
             {
-                x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - control_voltage, time_E);
+                x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - adaptive_control_voltage, time_E);
             }
             break;
         }
         }
-        if (x > 0) // 将控制力转为平方增强，平方会消掉正负，需要判断
-            x = x * x / 250;
-        else
-            x = -x * x / 250;
+        
+        // Enhanced pressure control responsiveness when enabled
+        if (PRESSURE_CONTROL_RESPONSIVE) {
+            // Scale PID output for more responsive control
+            x *= PRESSURE_CONTROL_PID_P_SCALE;
+            
+            // Limit maximum correction to prevent excessive force
+            if (x > PRESSURE_CONTROL_MAX_CORRECTION) {
+                x = PRESSURE_CONTROL_MAX_CORRECTION;
+            } else if (x < -PRESSURE_CONTROL_MAX_CORRECTION) {
+                x = -PRESSURE_CONTROL_MAX_CORRECTION;
+            }
+        } else {
+            // Original control scaling
+            if (x > 0) // 将控制力转为平方增强，平方会消掉正负，需要判断
+                x = x * x / 250;
+            else
+                x = -x * x / 250;
+        }
+        
         return x;
     }
     void run(float time_E)
@@ -405,7 +452,11 @@ public:
                 // 已经触发过，或微动触发在其他状态
                 if (MC_ONLINE_key_stu[CHx] != 0 && MC_PULL_stu[CHx] != 0)
                 { // 如果滑块被人为拉动，做出对应响应
-                    x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - 1.65, time_E);
+                    float target_pressure = 1.65f; // Default target
+                    if (ADAPTIVE_PRESSURE_ENABLED && pressure_calibration[CHx].is_calibrated) {
+                        target_pressure = pressure_calibration[CHx].zero_point;
+                    }
+                    x = dir * PID_pressure.caculate(MC_PULL_stu_raw[CHx] - target_pressure, time_E);
                 }
                 else
                 { // 否则，保持停机
@@ -423,13 +474,24 @@ public:
                         pull_state_old = false; // 检测到耗材已处于低压力。
                     }
                 } else {
-                    if (MC_PULL_stu_raw[CHx] < 1.65)
-                    {
-                        x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], 1.65, time_E, pressure_control_enum::less_pressure);
+                    // Use adaptive pressure control if available
+                    float target_pressure = 1.65f; // Default target
+                    float pressure_tolerance = 0.05f; // Default tolerance
+                    
+                    if (ADAPTIVE_PRESSURE_ENABLED && pressure_calibration[CHx].is_calibrated) {
+                        target_pressure = pressure_calibration[CHx].zero_point;
+                        pressure_tolerance = PRESSURE_CONTROL_DEADBAND_SMALL;
                     }
-                    else if (MC_PULL_stu_raw[CHx] > 1.7)
+                    
+                    float pressure_error = MC_PULL_stu_raw[CHx] - target_pressure;
+                    
+                    if (pressure_error < -pressure_tolerance) // Too low pressure
                     {
-                        x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], 1.7, time_E, pressure_control_enum::over_pressure);
+                        x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], target_pressure, time_E, pressure_control_enum::less_pressure);
+                    }
+                    else if (pressure_error > pressure_tolerance) // Too high pressure
+                    {
+                        x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], target_pressure, time_E, pressure_control_enum::over_pressure);
                     }
                 }
             }
@@ -800,6 +862,11 @@ void motor_motion_run(int error)
 void Motion_control_run(int error)
 {
     MC_PULL_ONLINE_read();
+
+    // Run automatic pressure sensor calibration if enabled
+    if (!error && ADAPTIVE_PRESSURE_ENABLED) {
+        pressure_sensor_auto_calibrate();
+    }
 
     AS5600_distance_updata();
     for (int i = 0; i < 4; i++)
@@ -1474,6 +1541,230 @@ void reset_all_learned_directions()
     #endif
 }
 
+// =============================================================================
+// Adaptive Pressure Control Implementation
+// =============================================================================
+
+/**
+ * Calibrate pressure sensor for a specific channel
+ * Learns the zero point and range characteristics of the sensor
+ */
+void pressure_sensor_calibrate_channel(int channel)
+{
+    if (!ADAPTIVE_PRESSURE_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    // Only calibrate if no filament is present to get accurate zero reading
+    if (MC_ONLINE_key_stu[channel] != 0) {
+        return; // Filament present, cannot calibrate
+    }
+    
+    PressureSensorCalibration& cal = pressure_calibration[channel];
+    
+    // Initialize calibration
+    float voltage_sum = 0.0f;
+    float voltage_min = 5.0f;
+    float voltage_max = 0.0f;
+    uint16_t samples = 0;
+    uint64_t calibration_start = get_time64();
+    
+    DEBUG_MY("Starting pressure sensor calibration for channel ");
+    DEBUG_float(channel, 0);
+    DEBUG_MY("\n");
+    
+    // Collect samples for calibration
+    while (samples < PRESSURE_CALIBRATION_SAMPLES && 
+           (get_time64() - calibration_start) < PRESSURE_CALIBRATION_TIME_MS) {
+        
+        // Ensure we still have no filament during calibration
+        if (MC_ONLINE_key_stu[channel] != 0) {
+            DEBUG_MY("Calibration aborted - filament detected\n");
+            return;
+        }
+        
+        float voltage = MC_PULL_stu_raw[channel];
+        
+        // Validate reading is within reasonable bounds
+        if (voltage >= PRESSURE_RANGE_MIN_VOLTAGE && voltage <= PRESSURE_RANGE_MAX_VOLTAGE) {
+            voltage_sum += voltage;
+            voltage_min = min(voltage_min, voltage);
+            voltage_max = max(voltage_max, voltage);
+            samples++;
+        }
+        
+        delay(50); // Sample every 50ms
+    }
+    
+    if (samples < (PRESSURE_CALIBRATION_SAMPLES / 2)) {
+        DEBUG_MY("Calibration failed - insufficient samples\n");
+        return;
+    }
+    
+    // Calculate zero point (average of no-load readings)
+    cal.zero_point = voltage_sum / samples;
+    
+    // Estimate range based on sensor type and observed variation
+    float observed_variation = voltage_max - voltage_min;
+    
+    // Use a conservative estimate for range if we only saw small variation
+    if (observed_variation < PRESSURE_ZERO_TOLERANCE) {
+        // Assume typical sensor range around zero point
+        cal.positive_range = 0.8f; // Typical range above zero
+        cal.negative_range = 0.8f; // Typical range below zero
+    } else {
+        // Use larger range based on observed variation
+        cal.positive_range = max(0.5f, observed_variation * 4.0f);
+        cal.negative_range = max(0.5f, observed_variation * 4.0f);
+    }
+    
+    // Calculate dynamic thresholds based on learned characteristics
+    float deadband_range = min(cal.positive_range, cal.negative_range) * PRESSURE_DEADBAND_SCALE;
+    cal.deadband_low = cal.zero_point - deadband_range;
+    cal.deadband_high = cal.zero_point + deadband_range;
+    
+    // Mark as calibrated
+    cal.calibration_samples = samples;
+    cal.is_calibrated = true;
+    cal.last_calibration_time = get_time64();
+    
+    // Copy to save structure
+    Motion_control_data_save.pressure_cal[channel] = cal;
+    
+    DEBUG_MY("Pressure calibration complete for CH");
+    DEBUG_float(channel, 0);
+    DEBUG_MY(": zero=");
+    DEBUG_float(cal.zero_point, 3);
+    DEBUG_MY("V, range=");
+    DEBUG_float(cal.positive_range, 3);
+    DEBUG_MY("V, deadband=");
+    DEBUG_float(cal.deadband_low, 3);
+    DEBUG_MY("-");
+    DEBUG_float(cal.deadband_high, 3);
+    DEBUG_MY("V\n");
+}
+
+/**
+ * Automatically calibrate pressure sensors during idle periods
+ * Called periodically during system operation
+ */
+void pressure_sensor_auto_calibrate()
+{
+    if (!ADAPTIVE_PRESSURE_ENABLED || !PRESSURE_AUTO_RECALIBRATION) {
+        return;
+    }
+    
+    static uint64_t last_auto_calibration = 0;
+    uint64_t current_time = get_time64();
+    
+    // Only attempt auto-calibration every 30 seconds
+    if (current_time - last_auto_calibration < 30000) {
+        return;
+    }
+    
+    last_auto_calibration = current_time;
+    
+    // Check each channel for calibration needs
+    for (int channel = 0; channel < MAX_FILAMENT_CHANNELS; channel++) {
+        PressureSensorCalibration& cal = pressure_calibration[channel];
+        
+        // Skip if recently calibrated (within 5 minutes)
+        if (cal.is_calibrated && 
+            (current_time - cal.last_calibration_time) < 300000) {
+            continue;
+        }
+        
+        // Only calibrate if channel is idle and no filament present
+        if (filament_now_position[channel] == filament_idle && 
+            MC_ONLINE_key_stu[channel] == 0) {
+            pressure_sensor_calibrate_channel(channel);
+        }
+    }
+}
+
+/**
+ * Reset calibration data for a specific channel
+ */
+void pressure_sensor_reset_calibration(int channel)
+{
+    if (channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return;
+    }
+    
+    PressureSensorCalibration& cal = pressure_calibration[channel];
+    memset(&cal, 0, sizeof(PressureSensorCalibration));
+    
+    // Set defaults
+    cal.zero_point = 1.65f; // Conservative default around middle voltage
+    cal.positive_range = 0.6f;
+    cal.negative_range = 0.6f;
+    cal.deadband_low = PULL_VOLTAGE_LOW;   // Fall back to static values
+    cal.deadband_high = PULL_VOLTAGE_HIGH;
+    cal.is_calibrated = false;
+    
+    Motion_control_data_save.pressure_cal[channel] = cal;
+    
+    DEBUG_MY("Pressure calibration reset for channel ");
+    DEBUG_float(channel, 0);
+    DEBUG_MY("\n");
+}
+
+/**
+ * Get dynamic high pressure threshold for a channel
+ */
+float get_dynamic_pressure_threshold_high(int channel)
+{
+    if (!ADAPTIVE_PRESSURE_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return PULL_VOLTAGE_HIGH; // Fall back to static threshold
+    }
+    
+    const PressureSensorCalibration& cal = pressure_calibration[channel];
+    
+    if (!cal.is_calibrated) {
+        return PULL_VOLTAGE_HIGH; // Fall back to static threshold
+    }
+    
+    return cal.zero_point + (cal.positive_range * PRESSURE_HIGH_THRESHOLD_SCALE);
+}
+
+/**
+ * Get dynamic low pressure threshold for a channel
+ */
+float get_dynamic_pressure_threshold_low(int channel)
+{
+    if (!ADAPTIVE_PRESSURE_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return PULL_VOLTAGE_LOW; // Fall back to static threshold
+    }
+    
+    const PressureSensorCalibration& cal = pressure_calibration[channel];
+    
+    if (!cal.is_calibrated) {
+        return PULL_VOLTAGE_LOW; // Fall back to static threshold
+    }
+    
+    return cal.zero_point - (cal.negative_range * PRESSURE_LOW_THRESHOLD_SCALE);
+}
+
+/**
+ * Check if pressure reading is within acceptable deadband around zero
+ */
+bool is_pressure_in_deadband(int channel, float pressure)
+{
+    if (!ADAPTIVE_PRESSURE_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        // Fall back to static deadband check
+        return (pressure >= PULL_VOLTAGE_LOW && pressure <= PULL_VOLTAGE_HIGH);
+    }
+    
+    const PressureSensorCalibration& cal = pressure_calibration[channel];
+    
+    if (!cal.is_calibrated) {
+        // Fall back to static deadband check
+        return (pressure >= PULL_VOLTAGE_LOW && pressure <= PULL_VOLTAGE_HIGH);
+    }
+    
+    return (pressure >= cal.deadband_low && pressure <= cal.deadband_high);
+}
+
 // Convert angle difference, handling wraparound
 int M5600_angle_dis(int16_t angle1, int16_t angle2)
 {
@@ -1713,6 +2004,23 @@ void Motion_control_init() // 初始化所有运动和传感器
     MC_PULL_ONLINE_init();
     MC_PULL_ONLINE_read();
     MOTOR_init();
+    
+    // Initialize pressure calibration system
+    if (ADAPTIVE_PRESSURE_ENABLED) {
+        // Load calibration data from flash or initialize defaults
+        for (int i = 0; i < MAX_FILAMENT_CHANNELS; i++) {
+            if (Motion_control_data_save.pressure_cal[i].is_calibrated) {
+                pressure_calibration[i] = Motion_control_data_save.pressure_cal[i];
+                DEBUG_MY("Loaded pressure calibration for CH");
+                DEBUG_float(i, 0);
+                DEBUG_MY(": zero=");
+                DEBUG_float(pressure_calibration[i].zero_point, 3);
+                DEBUG_MY("V\n");
+            } else {
+                pressure_sensor_reset_calibration(i);
+            }
+        }
+    }
     
     /*
     //这是一段阻塞的DEBUG代码
