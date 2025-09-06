@@ -1,0 +1,49 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# C/C++ source files
+[*.{c,cpp,h,hpp}]
+indent_size = 2
+max_line_length = 120
+
+# Python files
+[*.py]
+indent_size = 4
+max_line_length = 88
+
+# Markdown files
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = 80
+
+# YAML files
+[*.{yml,yaml}]
+indent_size = 2
+
+# JSON files
+[*.json]
+indent_size = 2
+
+# INI files (PlatformIO config)
+[*.ini]
+indent_size = 2
+
+# Makefiles
+[{Makefile,makefile,*.mk}]
+indent_style = tab
+indent_size = 4
+
+# Batch files
+[*.bat]
+end_of_line = crlf

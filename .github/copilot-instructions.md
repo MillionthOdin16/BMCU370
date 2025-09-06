@@ -30,11 +30,16 @@ The following are outputs from frequently run commands. Reference them instead o
 ```
 .
 ├── .github/workflows/          # CI/CD automation (dev-build.yml, build-firmware.yml)
-├── docs/                       # Comprehensive documentation
+├── docs/                       # Comprehensive documentation (organized by category)
+│   ├── firmware/              # Firmware-specific docs (API, development, CI/CD)
+│   ├── hardware/              # Hardware specs and setup
+│   ├── assembly/              # Physical assembly documentation
+│   └── tools/                 # Development and programming tools
 ├── src/                        # Source code (C++ with Arduino framework)
 ├── scripts/version_extract.py  # Build version information utility
 ├── platformio.ini              # PlatformIO build configuration
 ├── README.md                   # Complete project documentation
+├── CONTRIBUTING.md             # Development guidelines and standards
 └── CHANGELOG.md                # Detailed version history
 ```
 

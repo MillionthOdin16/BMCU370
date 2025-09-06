@@ -41,6 +41,18 @@ The BMCU370 is a sophisticated multi-material 3D printing controller designed fo
   - Packet parsing utilities and simulators
   - Research data from the Bambu Research Group
 
+## Documentation
+
+📚 **Comprehensive documentation is available in the [`docs/`](docs/) directory:**
+
+- **[Quick Start Guide](docs/firmware/DEV-BUILD-QUICK-START.md)** - Get started in 2 minutes
+- **[API Documentation](docs/firmware/API.md)** - Complete firmware API reference
+- **[Hardware Guide](docs/hardware/HARDWARE.md)** - Hardware specifications and setup
+- **[Assembly Instructions](docs/assembly/)** - Physical assembly documentation
+- **[CI/CD Guide](docs/firmware/CI-CD.md)** - Build automation and deployment
+
+For a complete overview of available documentation, see the [docs README](docs/README.md).
+
 ## Building
 
 ### Prerequisites
@@ -105,8 +117,8 @@ src/
 - **Checksums** - SHA256 verification
 
 📚 **Documentation:**
-- [Dev Build Quick Start](docs/DEV-BUILD-QUICK-START.md) - Get started in 2 minutes
-- [Complete CI/CD Guide](docs/CI-CD.md) - Full documentation and best practices
+- [Quick Start Guide](docs/firmware/DEV-BUILD-QUICK-START.md) - Get started in 2 minutes
+- [Complete CI/CD Guide](docs/firmware/CI-CD.md) - Full documentation and best practices
 
 ---
 
@@ -283,7 +295,7 @@ The workflow will:
 **Problem**: Motor direction reversed on channels 1 and 2 (and sometimes 3)
 - **Cause**: Inconsistent magnet polarity orientation during assembly affecting AS5600 Hall sensor readings
 - **Solution**: ✅ **Fixed in firmware v2.0.0+** - Automatic direction learning during normal filament loading
-- **Details**: See [Automatic Direction Detection Documentation](docs/AUTOMATIC_DIRECTION_DETECTION.md)
+- **Details**: See [Automatic Direction Detection Documentation](docs/firmware/AUTOMATIC_DIRECTION_DETECTION.md)
 
 **Problem**: Communication timeout with printer
 - **Cause**: BambuBus protocol error or cable issue

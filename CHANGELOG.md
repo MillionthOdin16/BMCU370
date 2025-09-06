@@ -5,6 +5,30 @@ All notable changes to the BMCU370 firmware will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Comprehensive .editorconfig** for consistent code formatting across editors
+- **Detailed CONTRIBUTING.md** with development guidelines and standards
+- **Organized documentation structure** with logical subdirectories:
+  - `docs/firmware/` - Firmware-specific documentation
+  - `docs/hardware/` - Hardware specifications and setup
+  - `docs/assembly/` - Physical assembly documentation
+  - `docs/tools/` - Development and programming tools
+- **Documentation navigation** with comprehensive docs/README.md
+
+### Enhanced
+- **Improved .gitignore** with comprehensive exclusions for all build artifacts and IDE files
+- **README structure** with better organization and updated documentation links
+- **Repository organization** following best practices for embedded firmware projects
+
+### Removed
+- Outdated "Motor reversal, please see.txt" file (functionality now handled by automatic direction detection)
+
+### Changed
+- **Documentation organization**: Moved all docs to logical subdirectories
+- **README links**: Updated all documentation references to new organized structure
+
 ## [2.0.0] - 2024-09-04
 
 ### Added
