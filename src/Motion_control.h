@@ -10,6 +10,8 @@ extern void Motion_control_run(int error);
 extern void pressure_sensor_calibrate_channel(int channel);
 extern void pressure_sensor_auto_calibrate();
 extern void pressure_sensor_reset_calibration(int channel);
+extern void pressure_sensor_reset_all_calibration();
+extern void pressure_sensor_force_calibrate_all();
 extern float get_dynamic_pressure_threshold_high(int channel);
 extern float get_dynamic_pressure_threshold_low(int channel);
 extern bool is_pressure_in_deadband(int channel, float pressure);

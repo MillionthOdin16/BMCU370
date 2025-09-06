@@ -166,6 +166,15 @@ struct alignas(4) PressureSensorCalibration
     uint64_t last_calibration_time; ///< Last time calibration was performed
 } pressure_calibration[MAX_FILAMENT_CHANNELS];
 
+// Active pressure correction state for each channel
+struct PressureCorrectionState
+{
+    bool correction_active;     ///< Whether active correction is currently running
+    uint64_t correction_start_time; ///< When active correction started
+    float target_pressure;     ///< Target pressure for correction
+    float initial_error;       ///< Initial pressure error when correction started
+} pressure_correction[MAX_FILAMENT_CHANNELS];
+
 struct alignas(4) Motion_control_save_struct
 {
     int Motion_control_dir[4];
@@ -474,7 +483,7 @@ public:
                         pull_state_old = false; // 检测到耗材已处于低压力。
                     }
                 } else {
-                    // Use adaptive pressure control if available
+                    // Use adaptive pressure control with active correction if available
                     float target_pressure = 1.65f; // Default target
                     float pressure_tolerance = 0.05f; // Default tolerance
                     
@@ -484,14 +493,43 @@ public:
                     }
                     
                     float pressure_error = MC_PULL_stu_raw[CHx] - target_pressure;
+                    float abs_pressure_error = fabs(pressure_error);
                     
-                    if (pressure_error < -pressure_tolerance) // Too low pressure
-                    {
-                        x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], target_pressure, time_E, pressure_control_enum::less_pressure);
+                    // Check if we should start active pressure correction
+                    if (PRESSURE_ACTIVE_CORRECTION && 
+                        abs_pressure_error > PRESSURE_DRIFT_THRESHOLD &&
+                        !pressure_correction[CHx].correction_active) {
+                        
+                        // Start active correction
+                        pressure_correction[CHx].correction_active = true;
+                        pressure_correction[CHx].correction_start_time = get_time64();
+                        pressure_correction[CHx].target_pressure = target_pressure;
+                        pressure_correction[CHx].initial_error = pressure_error;
                     }
-                    else if (pressure_error > pressure_tolerance) // Too high pressure
-                    {
-                        x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], target_pressure, time_E, pressure_control_enum::over_pressure);
+                    
+                    // Handle active pressure correction
+                    if (pressure_correction[CHx].correction_active) {
+                        uint64_t correction_time = get_time64() - pressure_correction[CHx].correction_start_time;
+                        
+                        // Check if correction should be stopped
+                        if (correction_time > PRESSURE_CORRECTION_TIMEOUT_MS ||
+                            abs_pressure_error < pressure_tolerance) {
+                            pressure_correction[CHx].correction_active = false;
+                        } else {
+                            // Apply active correction - more aggressive than normal
+                            x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], target_pressure, time_E, pressure_control_enum::all);
+                            x *= 1.5f; // More aggressive correction during active mode
+                        }
+                    } else {
+                        // Normal pressure control
+                        if (pressure_error < -pressure_tolerance) // Too low pressure
+                        {
+                            x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], target_pressure, time_E, pressure_control_enum::less_pressure);
+                        }
+                        else if (pressure_error > pressure_tolerance) // Too high pressure
+                        {
+                            x = _get_x_by_pressure(MC_PULL_stu_raw[CHx], target_pressure, time_E, pressure_control_enum::over_pressure);
+                        }
                     }
                 }
             }
@@ -1718,6 +1756,11 @@ float get_dynamic_pressure_threshold_high(int channel)
         return PULL_VOLTAGE_HIGH; // Fall back to static threshold
     }
     
+    // Check if adaptive control is disabled for this channel
+    if (PRESSURE_ADAPTIVE_DISABLE_MASK & (1 << channel)) {
+        return PULL_VOLTAGE_HIGH; // Fall back to static threshold
+    }
+    
     const PressureSensorCalibration& cal = pressure_calibration[channel];
     
     if (!cal.is_calibrated) {
@@ -1733,6 +1776,11 @@ float get_dynamic_pressure_threshold_high(int channel)
 float get_dynamic_pressure_threshold_low(int channel)
 {
     if (!ADAPTIVE_PRESSURE_ENABLED || channel < 0 || channel >= MAX_FILAMENT_CHANNELS) {
+        return PULL_VOLTAGE_LOW; // Fall back to static threshold
+    }
+    
+    // Check if adaptive control is disabled for this channel
+    if (PRESSURE_ADAPTIVE_DISABLE_MASK & (1 << channel)) {
         return PULL_VOLTAGE_LOW; // Fall back to static threshold
     }
     
@@ -1763,6 +1811,55 @@ bool is_pressure_in_deadband(int channel, float pressure)
     }
     
     return (pressure >= cal.deadband_low && pressure <= cal.deadband_high);
+}
+
+/**
+ * Reset calibration for all channels - useful for complete recalibration
+ */
+void pressure_sensor_reset_all_calibration()
+{
+    if (!ADAPTIVE_PRESSURE_ENABLED) {
+        return;
+    }
+    
+    for (int channel = 0; channel < MAX_FILAMENT_CHANNELS; channel++) {
+        pressure_sensor_reset_calibration(channel);
+    }
+    
+    // Save all changes to flash
+    Motion_control_save();
+    
+    DEBUG_MY("All pressure sensor calibrations reset\n");
+}
+
+/**
+ * Force immediate calibration of all channels (for testing/debugging)
+ * Note: This will only calibrate channels with no filament present
+ */
+void pressure_sensor_force_calibrate_all()
+{
+    if (!ADAPTIVE_PRESSURE_ENABLED) {
+        return;
+    }
+    
+    DEBUG_MY("Force calibrating all pressure sensors...\n");
+    
+    for (int channel = 0; channel < MAX_FILAMENT_CHANNELS; channel++) {
+        // Only calibrate if no filament is present
+        if (MC_ONLINE_key_stu[channel] == 0) {
+            pressure_sensor_calibrate_channel(channel);
+            delay(100); // Small delay between calibrations
+        } else {
+            DEBUG_MY("Skipping CH");
+            DEBUG_float(channel, 0);
+            DEBUG_MY(" - filament present\n");
+        }
+    }
+    
+    // Save all calibrations to flash
+    Motion_control_save();
+    
+    DEBUG_MY("Force calibration complete\n");
 }
 
 // Convert angle difference, handling wraparound
@@ -2019,6 +2116,9 @@ void Motion_control_init() // 初始化所有运动和传感器
             } else {
                 pressure_sensor_reset_calibration(i);
             }
+            
+            // Initialize pressure correction state
+            memset(&pressure_correction[i], 0, sizeof(PressureCorrectionState));
         }
     }
     

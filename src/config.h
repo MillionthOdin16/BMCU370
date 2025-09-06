@@ -95,6 +95,10 @@
 #define PRESSURE_CONTROL_DEADBAND_SMALL 0.02f   ///< Small deadband for responsive control in volts
 #define PRESSURE_CONTROL_PID_P_SCALE    2.0f    ///< Scaling factor for PID proportional gain
 #define PRESSURE_CONTROL_MAX_CORRECTION 800     ///< Maximum motor correction value for pressure control
+#define PRESSURE_ACTIVE_CORRECTION      true    ///< Enable active pressure correction when drift detected
+#define PRESSURE_DRIFT_THRESHOLD        0.03f   ///< Pressure drift threshold to trigger active correction (volts)
+#define PRESSURE_CORRECTION_TIMEOUT_MS  2000    ///< Maximum time for active pressure correction (ms)
+#define PRESSURE_ADAPTIVE_DISABLE_MASK  0x00    ///< Bitmask to disable adaptive control per channel (bit 0=CH0, bit 1=CH1, etc.)
 
 // Timing constants (in milliseconds)
 #define ASSIST_SEND_TIME_MS     1200        ///< Filament send assist duration
