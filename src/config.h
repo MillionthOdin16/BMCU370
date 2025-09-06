@@ -145,6 +145,55 @@
 #define DEFAULT_HUMIDITY_WET    12          ///< Default humidity threshold (%)
 
 // =============================================================================
+// Advanced Filament Type Configurations
+// =============================================================================
+
+// PLA Filament Configuration
+#define PLA_TEMP_MIN            190         ///< PLA minimum temperature (°C)
+#define PLA_TEMP_MAX            220         ///< PLA maximum temperature (°C)
+#define PLA_FEED_SPEED_FAST     80          ///< PLA fast feeding speed (mm/s)
+#define PLA_FEED_SPEED_SLOW     20          ///< PLA slow feeding speed (mm/s)
+#define PLA_RETRACT_SPEED       30          ///< PLA retraction speed (mm/s)
+#define PLA_PRESSURE_THRESHOLD  1.6f        ///< PLA specific pressure threshold
+
+// PETG Filament Configuration  
+#define PETG_TEMP_MIN           220         ///< PETG minimum temperature (°C)
+#define PETG_TEMP_MAX           250         ///< PETG maximum temperature (°C)
+#define PETG_FEED_SPEED_FAST    60          ///< PETG fast feeding speed (mm/s)
+#define PETG_FEED_SPEED_SLOW    15          ///< PETG slow feeding speed (mm/s)
+#define PETG_RETRACT_SPEED      25          ///< PETG retraction speed (mm/s)
+#define PETG_PRESSURE_THRESHOLD 1.75f       ///< PETG specific pressure threshold
+
+// ABS Filament Configuration
+#define ABS_TEMP_MIN            230         ///< ABS minimum temperature (°C)
+#define ABS_TEMP_MAX            260         ///< ABS maximum temperature (°C)
+#define ABS_FEED_SPEED_FAST     70          ///< ABS fast feeding speed (mm/s)
+#define ABS_FEED_SPEED_SLOW     18          ///< ABS slow feeding speed (mm/s)
+#define ABS_RETRACT_SPEED       28          ///< ABS retraction speed (mm/s)
+#define ABS_PRESSURE_THRESHOLD  1.8f        ///< ABS specific pressure threshold
+
+// TPU Filament Configuration (Flexible)
+#define TPU_TEMP_MIN            210         ///< TPU minimum temperature (°C)
+#define TPU_TEMP_MAX            240         ///< TPU maximum temperature (°C)
+#define TPU_FEED_SPEED_FAST     25          ///< TPU fast feeding speed (mm/s) - much slower
+#define TPU_FEED_SPEED_SLOW     8           ///< TPU slow feeding speed (mm/s)
+#define TPU_RETRACT_SPEED       10          ///< TPU retraction speed (mm/s) - very slow
+#define TPU_PRESSURE_THRESHOLD  1.5f        ///< TPU specific pressure threshold - lower
+
+// WOOD Filament Configuration
+#define WOOD_TEMP_MIN           180         ///< WOOD minimum temperature (°C)
+#define WOOD_TEMP_MAX           210         ///< WOOD maximum temperature (°C)
+#define WOOD_FEED_SPEED_FAST    50          ///< WOOD fast feeding speed (mm/s)
+#define WOOD_FEED_SPEED_SLOW    12          ///< WOOD slow feeding speed (mm/s)
+#define WOOD_RETRACT_SPEED      20          ///< WOOD retraction speed (mm/s)
+#define WOOD_PRESSURE_THRESHOLD 1.55f       ///< WOOD specific pressure threshold
+
+// Adaptive filament handling
+#define ADAPTIVE_SPEED_ENABLED  true        ///< Enable adaptive speed based on filament type
+#define ADAPTIVE_PRESSURE_ENABLED true      ///< Enable adaptive pressure thresholds
+#define FILAMENT_TYPE_DETECTION_ENABLED true ///< Enable automatic filament type detection via NFC
+
+// =============================================================================
 // Channel Configuration
 // =============================================================================
 
@@ -197,7 +246,7 @@
 #define MOTOR_DIR_CORRECTION_CH3   false     ///< Channel 3 direction correction (fallback)
 
 // =============================================================================
-// Timing Delays
+// Timing and Responsiveness Configuration
 // =============================================================================
 
 /**
@@ -211,6 +260,23 @@
  * @param time Delay time in milliseconds
  */
 #define DELAY_MS_DIVISOR(time)  ((uint64_t)(80000.0 / (time)))
+
+// Interrupt and timing priorities
+#define MAIN_LOOP_PRIORITY              0           ///< Main loop task priority
+#define SENSOR_UPDATE_PRIORITY          1           ///< Sensor update priority (highest)
+#define COMMUNICATION_PRIORITY          2           ///< Communication handling priority
+#define RGB_UPDATE_PRIORITY             3           ///< RGB update priority (lowest)
+
+// Timing intervals for responsiveness
+#define SENSOR_UPDATE_INTERVAL_US       500         ///< Sensor update interval (500μs = 2kHz)
+#define FAST_LOOP_INTERVAL_US           100         ///< Fast loop interval for critical operations
+#define COMMUNICATION_POLL_INTERVAL_US  1000        ///< Communication polling interval (1ms)
+#define RGB_UPDATE_FAST_INTERVAL_MS     50          ///< Fast RGB update for animations (20Hz)
+
+// Motion control responsiveness
+#define MOTOR_CONTROL_UPDATE_RATE_HZ    1000        ///< Motor control update rate (1kHz)
+#define POSITION_FEEDBACK_RATE_HZ       500         ///< Position feedback sampling rate (500Hz)
+#define SPEED_CALCULATION_FILTER_TC     10          ///< Speed calculation time constant (samples)
 
 // =============================================================================
 // Error Codes
