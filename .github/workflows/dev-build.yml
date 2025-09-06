@@ -1,0 +1,246 @@
+name: Dev Build
+
+on:
+  push:
+    branches: ['**']  # All branches
+    paths:
+      - 'src/**'
+      - 'platformio.ini'
+      - '.github/workflows/dev-build.yml'
+  pull_request:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'platformio.ini'
+      - '.github/workflows/dev-build.yml'
+  workflow_dispatch:  # Allow manual triggering
+
+# Prevent multiple concurrent builds on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dev-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for changelog generation
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+        
+    - name: Cache PlatformIO
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.platformio/.cache
+          ~/.platformio/packages
+          ~/.platformio/platforms
+        key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-pio-
+          
+    - name: Cache build directory
+      uses: actions/cache@v4
+      with:
+        path: .pio/build
+        key: ${{ runner.os }}-pio-build-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-pio-build-
+        
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install platformio
+        
+    - name: Get build metadata
+      id: metadata
+      run: |
+        # Generate version string for dev builds
+        if [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
+          VERSION="dev-pr${{ github.event.number }}-$(date +%Y%m%d-%H%M%S)"
+          BUILD_TYPE="pull_request"
+        else
+          VERSION="dev-$(date +%Y%m%d-%H%M%S)"
+          BUILD_TYPE="push"
+        fi
+        
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "build_type=${BUILD_TYPE}" >> $GITHUB_OUTPUT
+        echo "build_date=$(date -u +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
+        echo "commit_short=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
+        echo "platform=ch32v203c8t6" >> $GITHUB_OUTPUT
+        echo "arch=riscv32" >> $GITHUB_OUTPUT
+        
+    - name: Generate changelog since last build
+      id: changelog
+      run: |
+        # Find the last successful build (either tag or dev build)
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        if [ -z "$LAST_TAG" ]; then
+          # No tags found, use initial commit
+          LAST_REF=$(git rev-list --max-parents=0 HEAD)
+          CHANGELOG_TITLE="Changes since initial commit"
+        else
+          LAST_REF="$LAST_TAG"
+          CHANGELOG_TITLE="Changes since $LAST_TAG"
+        fi
+        
+        echo "last_ref=${LAST_REF}" >> $GITHUB_OUTPUT
+        echo "changelog_title=${CHANGELOG_TITLE}" >> $GITHUB_OUTPUT
+        
+        # Generate detailed changelog
+        CHANGELOG_FILE="/tmp/changelog.md"
+        echo "# $CHANGELOG_TITLE" > $CHANGELOG_FILE
+        echo "" >> $CHANGELOG_FILE
+        echo "**Build:** ${{ steps.metadata.outputs.version }} • ${{ steps.metadata.outputs.commit_short }} • ${{ steps.metadata.outputs.build_date }} UTC" >> $CHANGELOG_FILE
+        echo "**Type:** ${{ steps.metadata.outputs.build_type }}" >> $CHANGELOG_FILE
+        echo "" >> $CHANGELOG_FILE
+        
+        # Get commit log since last reference
+        if git rev-list --count ${LAST_REF}..HEAD > /dev/null 2>&1; then
+          COMMIT_COUNT=$(git rev-list --count ${LAST_REF}..HEAD)
+          if [ "$COMMIT_COUNT" -gt 0 ]; then
+            echo "## Commits ($COMMIT_COUNT)" >> $CHANGELOG_FILE
+            echo "" >> $CHANGELOG_FILE
+            git log --oneline --reverse ${LAST_REF}..HEAD | sed 's/^/- /' >> $CHANGELOG_FILE
+            echo "" >> $CHANGELOG_FILE
+            
+            echo "## File Changes" >> $CHANGELOG_FILE
+            echo "" >> $CHANGELOG_FILE
+            git diff --name-status ${LAST_REF}..HEAD | while read status file; do
+              case $status in
+                A) echo "- **Added:** $file" >> $CHANGELOG_FILE ;;
+                M) echo "- **Modified:** $file" >> $CHANGELOG_FILE ;;
+                D) echo "- **Deleted:** $file" >> $CHANGELOG_FILE ;;
+                R*) echo "- **Renamed:** $file" >> $CHANGELOG_FILE ;;
+                *) echo "- **Changed:** $file" >> $CHANGELOG_FILE ;;
+              esac
+            done
+          else
+            echo "No changes since $LAST_REF" >> $CHANGELOG_FILE
+          fi
+        else
+          echo "Initial build - no previous reference to compare" >> $CHANGELOG_FILE
+        fi
+        
+        echo "changelog_file=$CHANGELOG_FILE" >> $GITHUB_OUTPUT
+        
+    - name: Build firmware
+      run: |
+        echo "Building firmware for ${{ steps.metadata.outputs.version }}..."
+        pio run
+        
+    - name: Prepare dev build artifacts
+      run: |
+        # Create build directory
+        mkdir -p dev-build-artifacts
+        
+        # Define variables
+        VERSION="${{ steps.metadata.outputs.version }}"
+        PLATFORM="${{ steps.metadata.outputs.platform }}"
+        ARCH="${{ steps.metadata.outputs.arch }}"
+        BUILD_DATE="${{ steps.metadata.outputs.build_date }}"
+        COMMIT_SHORT="${{ steps.metadata.outputs.commit_short }}"
+        
+        # Copy firmware files with dev naming convention
+        cp .pio/build/genericCH32V203C8T6/firmware.bin "dev-build-artifacts/bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.bin"
+        cp .pio/build/genericCH32V203C8T6/firmware.elf "dev-build-artifacts/bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.elf"
+        
+        # Copy changelog
+        cp ${{ steps.changelog.outputs.changelog_file }} "dev-build-artifacts/CHANGELOG-${VERSION}.md"
+        
+        # Create build info file
+        cat > dev-build-artifacts/DEV-BUILD-INFO.txt << EOF
+        BMCU370 Firmware Dev Build Information
+        ======================================
+        
+        Version: ${VERSION}
+        Platform: ${PLATFORM^^} (${ARCH^^})
+        Commit: ${COMMIT_SHORT} (${GITHUB_SHA})
+        Build Date: ${BUILD_DATE} UTC
+        Build Type: ${{ steps.metadata.outputs.build_type }}
+        PlatformIO Version: $(pio --version)
+        
+        ⚠️  DEVELOPMENT BUILD ⚠️
+        This is an automated development build and may contain:
+        - Experimental features
+        - Debug code
+        - Incomplete functionality
+        - Potential stability issues
+        
+        Use at your own risk. For production use, download official releases.
+        
+        Hardware Specifications:
+        - Target MCU: CH32V203C8T6 
+        - Architecture: RISC-V 32-bit
+        - Clock Speed: 144MHz
+        - Framework: Arduino
+        
+        Firmware Configuration:
+        - AMS Firmware Version: 00.00.06.49
+        - AMS Lite Firmware Version: 00.01.02.03
+        - BambuBus Protocol Version: 5
+        
+        Dev Build Artifacts:
+        - bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.bin - Main firmware binary
+        - bmcu370-firmware_${VERSION}_${PLATFORM}-${ARCH}.elf - ELF debug symbols
+        - DEV-BUILD-INFO.txt - This development build information
+        - CHANGELOG-${VERSION}.md - Changes since last build
+        - SHA256SUMS.txt - Checksums for verification
+        
+        Installation Instructions:
+        1. Use a compatible CH32V programmer (WCH-Link recommended)
+        2. Flash the .bin file to address 0x08000000
+        3. Reset the device to start the new firmware
+        
+        For detailed documentation and troubleshooting:
+        https://github.com/MillionthOdin16/BMCU370
+        EOF
+        
+        # Create checksums
+        cd dev-build-artifacts
+        sha256sum *.bin *.elf > SHA256SUMS.txt
+        cd ..
+        
+    - name: Upload dev build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bmcu370-dev-build_${{ steps.metadata.outputs.version }}_${{ steps.metadata.outputs.platform }}-${{ steps.metadata.outputs.arch }}
+        path: dev-build-artifacts/
+        retention-days: 30  # Shorter retention for dev builds
+        compression-level: 6
+        
+    - name: Comment on PR with build info
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const changelogPath = '${{ steps.changelog.outputs.changelog_file }}';
+          const changelog = fs.readFileSync(changelogPath, 'utf8');
+          
+          const comment = `## 🚀 Dev Build Complete
+          
+          **Build Version:** \`${{ steps.metadata.outputs.version }}\`
+          **Commit:** \`${{ steps.metadata.outputs.commit_short }}\`
+          **Artifacts:** [Download here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          ${changelog}
+          
+          ---
+          ⚠️ **Development Build Notice:** This is an automated development build. Use with caution and verify functionality before deploying to production hardware.`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

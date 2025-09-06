@@ -1,0 +1,69 @@
+name: Auto-approve workflows
+
+on:
+  workflow_run:
+    workflows: ["*"]
+    types: [requested]
+
+jobs:
+  auto-approve:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.actor.login == 'copilot' || 
+       github.event.workflow_run.actor.login == 'MillionthOdin16')
+    
+    steps:
+    - name: Auto-approve workflow run
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const actor = context.payload.workflow_run.actor.login;
+          const workflowName = context.payload.workflow_run.name;
+          const runId = context.payload.workflow_run.id;
+          const prNumber = context.payload.workflow_run.pull_requests[0]?.number;
+          
+          console.log(`Auto-approving workflow "${workflowName}" (ID: ${runId}) triggered by ${actor}`);
+          
+          try {
+            // Approve the workflow run
+            await github.rest.actions.approveWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId
+            });
+            
+            console.log(`✅ Successfully auto-approved workflow run ${runId} from ${actor}`);
+            
+            // Add a comment to the PR if this is a PR-triggered workflow
+            if (prNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `🤖 **Auto-approved workflow run**\n\n` +
+                      `Workflow "${workflowName}" has been automatically approved because it was triggered by @${actor}.\n\n` +
+                      `[View workflow run →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId})`
+              });
+            }
+            
+          } catch (error) {
+            console.error(`❌ Failed to auto-approve workflow run ${runId}:`, error);
+            
+            // If approval fails, comment on the PR with the error
+            if (prNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `⚠️ **Auto-approval failed**\n\n` +
+                      `Could not automatically approve workflow "${workflowName}" for @${actor}.\n` +
+                      `Manual approval may be required.\n\n` +
+                      `Error: ${error.message}\n\n` +
+                      `[View workflow run →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId})`
+              });
+            }
+            
+            throw error;
+          }

@@ -3,6 +3,7 @@
 **Bambu Multi-Color Unit (BMCU) - CH32V203 Microcontroller Firmware**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](#building)
+[![Dev Build](https://img.shields.io/badge/dev%20build-automated-blue)](#dev-builds)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-blue)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-CH32V203-orange)](#hardware)
 
@@ -79,6 +80,35 @@ src/
 ├── Adafruit_NeoPixel.cpp/h # RGB LED control library
 └── time64.cpp/h         # 64-bit timestamp utilities
 ```
+
+## Dev Builds
+
+🚀 **Automated Dev Builds** are now available! Every commit and pull request automatically triggers a development build with:
+
+- ⚡ **Fast builds** with comprehensive caching (50-80% faster)
+- 📝 **Automatic changelog** generation since last build
+- 💬 **PR comments** with build information and changelog
+- 📦 **Build artifacts** ready for download and testing
+
+### Quick Start:
+
+1. **Push code** → Dev build triggers automatically
+2. **Check GitHub Actions** for build status  
+3. **Download artifacts** from Actions page
+4. **Review changelog** in PR comments (for PRs)
+
+### Artifacts Available:
+- **Firmware binary** (`.bin`) - Ready to flash
+- **ELF file** (`.elf`) - Debug symbols  
+- **Build info** - Complete metadata
+- **Changelog** - What changed since last build
+- **Checksums** - SHA256 verification
+
+📚 **Documentation:**
+- [Dev Build Quick Start](docs/DEV-BUILD-QUICK-START.md) - Get started in 2 minutes
+- [Complete CI/CD Guide](docs/CI-CD.md) - Full documentation and best practices
+
+---
 
 ## Configuration
 
