@@ -27,11 +27,28 @@
 #define SYSTEM_CLOCK_HZ         144000000UL  ///< System clock frequency in Hz
 
 // =============================================================================
-// Communication Configuration
+// Communication and Error Handling Configuration
 // =============================================================================
 
 #define DEBUG_UART_BAUDRATE     115200      ///< Debug UART baud rate
 #define BAMBU_BUS_VERSION       5           ///< BambuBus protocol version
+
+// Communication robustness improvements
+#define COMMUNICATION_RETRY_COUNT           3           ///< Number of retries for failed communications
+#define COMMUNICATION_TIMEOUT_MS            1000        ///< Communication timeout in milliseconds
+#define COMMUNICATION_RETRY_BACKOFF_MS      100         ///< Initial retry backoff delay
+#define COMMUNICATION_MAX_BACKOFF_MS        2000        ///< Maximum retry backoff delay
+#define COMMUNICATION_ERROR_RECOVERY_ENABLED true       ///< Enable automatic error recovery
+#define HEARTBEAT_TIMEOUT_MS                5000        ///< Heartbeat timeout for connection monitoring
+#define HEARTBEAT_RETRY_INTERVAL_MS         1000        ///< Heartbeat retry interval
+
+// Watchdog and system monitoring
+#define WATCHDOG_ENABLED                    true        ///< Enable hardware watchdog
+#define WATCHDOG_TIMEOUT_MS                 2000        ///< Watchdog timeout (2 seconds)
+#define SYSTEM_HEALTH_CHECK_INTERVAL_MS     500         ///< System health check interval
+#define VOLTAGE_MONITORING_ENABLED          true        ///< Enable supply voltage monitoring
+#define VOLTAGE_MIN_THRESHOLD               3.0f        ///< Minimum operating voltage (V)
+#define VOLTAGE_MAX_THRESHOLD               3.6f        ///< Maximum operating voltage (V)
 
 // =============================================================================
 // Firmware Version Configuration
@@ -94,6 +111,21 @@
 
 // Mathematical constants
 #define AS5600_PI               3.1415926535897932384626433832795
+
+// Sensor fault detection and robustness
+#define SENSOR_FAULT_THRESHOLD          5           ///< Consecutive failed readings before marking sensor as faulty
+#define SENSOR_RECOVERY_THRESHOLD       3           ///< Consecutive good readings before marking sensor as recovered
+#define SENSOR_NOISE_FILTER_SAMPLES     8           ///< Number of samples for noise filtering
+#define SENSOR_MAX_NOISE_RATIO          0.1f        ///< Maximum acceptable noise ratio (10%)
+#define SENSOR_CALIBRATION_INTERVAL_MS  30000       ///< Auto-calibration interval (30 seconds)
+#define SENSOR_TEMPERATURE_COMP_ENABLED true        ///< Enable temperature compensation
+#define SENSOR_DRIFT_DETECTION_ENABLED  true        ///< Enable sensor drift detection
+
+// ADC filtering and accuracy improvements
+#define ADC_STABILITY_THRESHOLD         0.01f       ///< ADC reading stability threshold (10mV)
+#define ADC_OUTLIER_DETECTION_ENABLED   true        ///< Enable outlier detection and rejection
+#define ADC_OUTLIER_THRESHOLD           2.0f        ///< Standard deviations for outlier detection
+#define ADC_ADAPTIVE_FILTER_ENABLED     true        ///< Enable adaptive filtering based on signal quality
 
 // =============================================================================
 // Default Filament Configuration
