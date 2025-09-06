@@ -355,6 +355,8 @@ void BambuBus_init()
             channel_colors[i][2] = data_save.filament[i].color_B;
             channel_colors[i][3] = data_save.filament[i].color_A;
         }
+        // Preserve channel selection when valid data is loaded from flash
+        // Only reset filament states but keep the selected channel
     }
     else
     {
@@ -370,6 +372,9 @@ void BambuBus_init()
         data_save.filament[3].color_R = 0x88;
         data_save.filament[3].color_G = 0x88;
         data_save.filament[3].color_B = 0x88;
+        
+        // Only reset channel selection when no valid data is available
+        data_save.BambuBus_now_filament_num = 0xFF;
     }
     for (auto &j : data_save.filament)
     {
@@ -382,7 +387,6 @@ void BambuBus_init()
         j.motion_set = AMS_filament_motion::idle;
         j.meters = 0;
     }
-    data_save.BambuBus_now_filament_num = 0xFF;
 
     BambuBUS_UART_Init();
 }
