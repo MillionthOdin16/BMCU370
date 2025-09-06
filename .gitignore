@@ -1,2 +1,82 @@
-.pio
-.vscode
+# PlatformIO
+.pio/
+.vscode/
+
+# Build artifacts
+*.bin
+*.elf
+*.hex
+*.map
+*.lst
+*.sym
+*.o
+*.d
+build/
+dist/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.cache
+.cache/
+
+# Environment and configuration
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Compressed files (keep tools in docs/tools/ but exclude others)
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+!docs/tools/*.zip
+
+# Debug and profiling
+*.prof
+*.lprof
+.coverage
+.nyc_output
+coverage/
+
+# Node.js (if used for tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
