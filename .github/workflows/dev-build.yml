@@ -1,6 +1,6 @@
 name: Dev Build
 
-"on":
+on:
   push:
     branches: ['**']  # All branches
     paths:
@@ -22,6 +22,8 @@ concurrency:
 
 jobs:
   dev-build:
+    # This job will now run automatically only if triggered by you or the copilot agent
+    if: github.actor == 'MillionthOdin16' || github.actor == 'copilot-swe-agent'
     runs-on: ubuntu-latest
     
     steps:
@@ -210,13 +212,45 @@ jobs:
         sha256sum *.bin *.elf > SHA256SUMS.txt
         cd ..
         
-    - name: Upload dev build artifacts
+    - name: Upload dev firmware binary
       uses: actions/upload-artifact@v4
       with:
-        name: bmcu370-dev-build_${{ steps.metadata.outputs.version }}_${{ steps.metadata.outputs.platform }}-${{ steps.metadata.outputs.arch }}
-        path: dev-build-artifacts/
-        retention-days: 30  # Shorter retention for dev builds
-        compression-level: 6
+        name: bmcu370-firmware_${{ steps.metadata.outputs.version }}_${{ steps.metadata.outputs.platform }}-${{ steps.metadata.outputs.arch }}.bin
+        path: dev-build-artifacts/bmcu370-firmware_${{ steps.metadata.outputs.version }}_${{ steps.metadata.outputs.platform }}-${{ steps.metadata.outputs.arch }}.bin
+        retention-days: 30
+        compression-level: 0
+        
+    - name: Upload dev firmware ELF debug file
+      uses: actions/upload-artifact@v4
+      with:
+        name: bmcu370-firmware_${{ steps.metadata.outputs.version }}_${{ steps.metadata.outputs.platform }}-${{ steps.metadata.outputs.arch }}.elf
+        path: dev-build-artifacts/bmcu370-firmware_${{ steps.metadata.outputs.version }}_${{ steps.metadata.outputs.platform }}-${{ steps.metadata.outputs.arch }}.elf
+        retention-days: 30
+        compression-level: 0
+        
+    - name: Upload dev build information
+      uses: actions/upload-artifact@v4
+      with:
+        name: DEV-BUILD-INFO_${{ steps.metadata.outputs.version }}.txt
+        path: dev-build-artifacts/DEV-BUILD-INFO.txt
+        retention-days: 30
+        compression-level: 0
+        
+    - name: Upload dev changelog
+      uses: actions/upload-artifact@v4
+      with:
+        name: CHANGELOG-${{ steps.metadata.outputs.version }}.md
+        path: dev-build-artifacts/CHANGELOG-${{ steps.metadata.outputs.version }}.md
+        retention-days: 30
+        compression-level: 0
+        
+    - name: Upload dev checksums
+      uses: actions/upload-artifact@v4
+      with:
+        name: SHA256SUMS_${{ steps.metadata.outputs.version }}.txt
+        path: dev-build-artifacts/SHA256SUMS.txt
+        retention-days: 30
+        compression-level: 0
         
     - name: Comment on PR with build info
       if: github.event_name == 'pull_request'
