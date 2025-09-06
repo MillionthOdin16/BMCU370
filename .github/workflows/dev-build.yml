@@ -1,6 +1,6 @@
 name: Dev Build
 
-on:
+"on":
   push:
     branches: ['**']  # All branches
     paths:

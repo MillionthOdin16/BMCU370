@@ -1,6 +1,6 @@
 name: Auto-approve workflows
 
-on:
+"on":
   workflow_run:
     workflows: ["*"]
     types: [requested]
@@ -9,7 +9,6 @@ jobs:
   auto-approve:
     runs-on: ubuntu-latest
     if: |
-      github.event.workflow_run.event == 'pull_request' &&
       (github.event.workflow_run.actor.login == 'copilot' || 
        github.event.workflow_run.actor.login == 'MillionthOdin16')
     
@@ -23,18 +22,25 @@ jobs:
           const workflowName = context.payload.workflow_run.name;
           const runId = context.payload.workflow_run.id;
           const prNumber = context.payload.workflow_run.pull_requests[0]?.number;
+          const headBranch = context.payload.workflow_run.head_branch;
+          const event = context.payload.workflow_run.event;
           
-          console.log(`Auto-approving workflow "${workflowName}" (ID: ${runId}) triggered by ${actor}`);
+          console.log(`🤖 Auto-approval triggered for workflow "${workflowName}" (ID: ${runId})`);
+          console.log(`📋 Details: Actor=${actor}, Event=${event}, Branch=${headBranch}, PR=${prNumber || 'N/A'}`);
           
           try {
-            // Approve the workflow run
-            await github.rest.actions.approveWorkflowRun({
+            // Use the correct API endpoint for approving workflow runs
+            const response = await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/approve', {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              run_id: runId
+              run_id: runId,
+              headers: {
+                'X-GitHub-Api-Version': '2022-11-28'
+              }
             });
             
-            console.log(`✅ Successfully auto-approved workflow run ${runId} from ${actor}`);
+            console.log(`✅ Successfully auto-approved workflow run ${runId} from @${actor}`);
+            console.log(`📄 Response status: ${response.status}`);
             
             // Add a comment to the PR if this is a PR-triggered workflow
             if (prNumber) {
@@ -42,28 +48,39 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: prNumber,
-                body: `🤖 **Auto-approved workflow run**\n\n` +
-                      `Workflow "${workflowName}" has been automatically approved because it was triggered by @${actor}.\n\n` +
+                body: `🤖 **Workflow Auto-Approved**\n\n` +
+                      `Workflow **"${workflowName}"** has been automatically approved because it was triggered by @${actor}.\n\n` +
+                      `📋 **Details:**\n` +
+                      `- Branch: \`${headBranch}\`\n` +
+                      `- Event: \`${event}\`\n` +
+                      `- Run ID: \`${runId}\`\n\n` +
                       `[View workflow run →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId})`
               });
             }
             
           } catch (error) {
             console.error(`❌ Failed to auto-approve workflow run ${runId}:`, error);
+            console.error(`📄 Error details:`, error.response?.data || error.message);
             
-            // If approval fails, comment on the PR with the error
+            // If approval fails, comment on the PR with detailed error info
             if (prNumber) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: prNumber,
                 body: `⚠️ **Auto-approval failed**\n\n` +
-                      `Could not automatically approve workflow "${workflowName}" for @${actor}.\n` +
+                      `Could not automatically approve workflow **"${workflowName}"** for @${actor}.\n` +
                       `Manual approval may be required.\n\n` +
-                      `Error: ${error.message}\n\n` +
+                      `📋 **Details:**\n` +
+                      `- Branch: \`${headBranch}\`\n` +
+                      `- Event: \`${event}\`\n` +
+                      `- Run ID: \`${runId}\`\n` +
+                      `- Error: \`${error.message}\`\n\n` +
                       `[View workflow run →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId})`
               });
             }
             
-            throw error;
+            // Don't throw the error to prevent the auto-approval workflow from failing
+            // Just log it and continue
+            console.log(`⚠️  Auto-approval failed, but continuing without throwing error`);
           }
