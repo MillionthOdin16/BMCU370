@@ -76,6 +76,12 @@ All parameters are defined in `src/config.h`:
 #define PRESSURE_DRIFT_THRESHOLD        0.03f   // Drift threshold (volts)
 ```
 
+### Timing Control
+```cpp
+#define PRESSURE_UPDATE_INTERVAL_MS     25      // Pressure update interval (ms) - 40 Hz
+#define PRESSURE_TIMING_CONTROL_ENABLED true    // Enable timing control for stability
+```
+
 ## Operation Modes
 
 ### 1. Automatic Mode (Default)
@@ -158,6 +164,31 @@ Total firmware memory usage remains well within safe limits:
 - Set `ADAPTIVE_PRESSURE_ENABLED` to `false` in config.h
 - Rebuild and flash firmware
 - System will use original static thresholds (1.45V-1.85V)
+
+## Timing Optimization
+
+### Update Rate Control
+The system implements configurable timing control for pressure measurement and correction:
+
+- **Default Rate**: 40 Hz (25ms intervals)
+- **Purpose**: Balance responsiveness with system stability
+- **Benefits**: 
+  - Reduces computational overhead
+  - Prevents over-correction instability
+  - Allows time for physical system response
+
+### Configuration
+```cpp
+#define PRESSURE_UPDATE_INTERVAL_MS     25      // Update interval (20-50ms recommended)
+#define PRESSURE_TIMING_CONTROL_ENABLED true    // Enable/disable timing control
+```
+
+### Recommended Settings
+- **High-performance systems**: 20ms (50 Hz)
+- **Standard operation**: 25ms (40 Hz) - default
+- **Conservative/stable**: 50ms (20 Hz)
+
+The timing control ensures pressure readings and corrections occur at optimal intervals rather than as fast as the main communication loop allows.
 
 ## Implementation Details
 

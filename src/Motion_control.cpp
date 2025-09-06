@@ -899,11 +899,26 @@ void motor_motion_run(int error)
 // 运动控制函数
 void Motion_control_run(int error)
 {
-    MC_PULL_ONLINE_read();
+    // Pressure control timing - limit update rate for better stability
+    static uint64_t last_pressure_update = 0;
+    uint64_t current_time = get_time64();
+    bool should_update_pressure = true;
+    
+    if (PRESSURE_TIMING_CONTROL_ENABLED) {
+        should_update_pressure = (current_time - last_pressure_update) >= PRESSURE_UPDATE_INTERVAL_MS;
+        if (should_update_pressure) {
+            last_pressure_update = current_time;
+        }
+    }
+    
+    // Update pressure readings at controlled rate
+    if (should_update_pressure) {
+        MC_PULL_ONLINE_read();
 
-    // Run automatic pressure sensor calibration if enabled
-    if (!error && ADAPTIVE_PRESSURE_ENABLED) {
-        pressure_sensor_auto_calibrate();
+        // Run automatic pressure sensor calibration if enabled
+        if (!error && ADAPTIVE_PRESSURE_ENABLED) {
+            pressure_sensor_auto_calibrate();
+        }
     }
 
     AS5600_distance_updata();

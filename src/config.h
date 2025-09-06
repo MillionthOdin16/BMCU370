@@ -100,6 +100,10 @@
 #define PRESSURE_CORRECTION_TIMEOUT_MS  2000    ///< Maximum time for active pressure correction (ms)
 #define PRESSURE_ADAPTIVE_DISABLE_MASK  0x00    ///< Bitmask to disable adaptive control per channel (bit 0=CH0, bit 1=CH1, etc.)
 
+// Pressure control timing
+#define PRESSURE_UPDATE_INTERVAL_MS     25      ///< Pressure measurement and control update interval (ms) - 40 Hz
+#define PRESSURE_TIMING_CONTROL_ENABLED true    ///< Enable pressure control timing limits
+
 // Timing constants (in milliseconds)
 #define ASSIST_SEND_TIME_MS     1200        ///< Filament send assist duration
 #define RGB_UPDATE_INTERVAL_MS  3000        ///< RGB update interval for error states
