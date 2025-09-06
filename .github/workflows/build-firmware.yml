@@ -195,13 +195,45 @@ jobs:
         sha256sum *.bin *.elf > SHA256SUMS.txt
         cd ..
         
-    - name: Upload firmware artifacts
+    - name: Upload firmware binary
       uses: actions/upload-artifact@v4
       with:
-        name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}
-        path: firmware-release/
+        name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin
+        path: firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.bin
         retention-days: 90
-        compression-level: 6
+        compression-level: 0
+        
+    - name: Upload firmware ELF debug file
+      uses: actions/upload-artifact@v4
+      with:
+        name: bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf
+        path: firmware-release/bmcu370-firmware_${{ steps.get_version.outputs.version }}_${{ steps.get_version.outputs.platform }}-${{ steps.get_version.outputs.arch }}.elf
+        retention-days: 90
+        compression-level: 0
+        
+    - name: Upload build information
+      uses: actions/upload-artifact@v4
+      with:
+        name: BUILD-INFO_${{ steps.get_version.outputs.version }}.txt
+        path: firmware-release/BUILD-INFO.txt
+        retention-days: 90
+        compression-level: 0
+        
+    - name: Upload release changelog
+      uses: actions/upload-artifact@v4
+      with:
+        name: RELEASE-CHANGELOG-${{ steps.get_version.outputs.version }}.md
+        path: firmware-release/RELEASE-CHANGELOG-${{ steps.get_version.outputs.version }}.md
+        retention-days: 90
+        compression-level: 0
+        
+    - name: Upload checksums
+      uses: actions/upload-artifact@v4
+      with:
+        name: SHA256SUMS_${{ steps.get_version.outputs.version }}.txt
+        path: firmware-release/SHA256SUMS.txt
+        retention-days: 90
+        compression-level: 0
         
     - name: Create GitHub Release and Upload Assets
       if: steps.get_version.outputs.is_tag == 'true'
