@@ -4,8 +4,20 @@
 CRC16 crc_16;
 CRC8 crc_8;
 
-uint8_t BambuBus_data_buf[1000];
-int BambuBus_have_data = 0;
+// Reduce buffer size to save RAM for queue
+#define MAX_PACKET_SIZE 512
+uint8_t BambuBus_data_buf[MAX_PACKET_SIZE];
+
+// Packet Queue Implementation
+#define QUEUE_SIZE 4
+struct Packet {
+    uint8_t data[MAX_PACKET_SIZE];
+    int length;
+};
+Packet packet_queue[QUEUE_SIZE];
+volatile int queue_head = 0;
+volatile int queue_tail = 0;
+
 uint16_t BambuBus_address = 0;
 uint8_t BambuBus_AMS_num = 0; // 0~3 代表被识别为 A B C D
 uint8_t AMS_humidity_wet = 12; // 0~100(百分比湿度)
@@ -58,6 +70,9 @@ void Bambubus_set_need_to_save()
 }
 void Bambubus_save()
 {
+    // Simple check: do not save if we are currently receiving data (heuristic)
+    // if (queue_head != queue_tail) return; // Maybe too strict?
+
     Flash_saves(&data_save, sizeof(data_save), use_flash_addr);
 }
 
@@ -171,12 +186,12 @@ bool BambuBus_if_on_print()
     }
     return on_print;
 }
-uint8_t buf_X[1000];
+
 CRC8 _RX_IRQ_crcx(0x39, 0x66, 0x00, false, false);
 void inline RX_IRQ(unsigned char _RX_IRQ_data)
 {
     static int _index = 0;
-    static int length = 999;
+    static int length = MAX_PACKET_SIZE - 1;
     static uint8_t data_length_index;
     static uint8_t data_CRC8_index;
     unsigned char data = _RX_IRQ_data;
@@ -213,6 +228,8 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
         if (_index == data_length_index) // the length byte
         {
             length = data;
+            // Basic sanity check on length
+            if (length >= MAX_PACKET_SIZE) length = MAX_PACKET_SIZE - 1;
         }
         if (_index < data_CRC8_index) // before CRC8 byte,add data
         {
@@ -227,15 +244,26 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
             }
         }
         ++_index;
+
+        // Overflow protection
+        if (_index >= MAX_PACKET_SIZE)
+        {
+             _index = 0;
+             return;
+        }
+
         if (_index >= length) // recv over,copy package data
         {
             _index = 0;
-            memcpy(buf_X, BambuBus_data_buf, length);
-            BambuBus_have_data = length;
-        }
-        if (_index >= 999) // recv error,reset
-        {
-            _index = 0;
+            // Push to Queue
+            int next_head = (queue_head + 1) % QUEUE_SIZE;
+            if (next_head != queue_tail) // Queue not full
+            {
+                memcpy(packet_queue[queue_head].data, BambuBus_data_buf, length);
+                packet_queue[queue_head].length = length;
+                queue_head = next_head;
+            }
+            // else: Queue full, drop packet (safer than overwriting current being read)
         }
     }
 }
@@ -420,8 +448,9 @@ void package_send_with_crc(uint8_t *data, int data_length)
     send_uart(data, data_length);
     if (need_debug)
     {
-        memcpy(buf_X + BambuBus_have_data, data, data_length);
-        DEBUG_num(buf_X, BambuBus_have_data + data_length);
+        // Debugging with queue is tricky, skipping direct debug write for now or need adaptation
+        // memcpy(buf_X + BambuBus_have_data, data, data_length);
+        // DEBUG_num(buf_X, BambuBus_have_data + data_length);
         need_debug = false;
     }
 }
@@ -662,7 +691,7 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
                 if ((data_save.filament[read_num].motion_set == AMS_filament_motion::need_send_out) || (data_save.filament[read_num].motion_set == AMS_filament_motion::idle))
                 {
                     data_save.filament[read_num].motion_set = AMS_filament_motion::on_use;
-                    data_save.filament[read_num].meters_virtual_count = 0;
+                    data_save.filament_read_num.meters_virtual_count = 0;
                 }
                 else if (data_save.filament[read_num].motion_set == AMS_filament_motion::before_pull_back)
                 {
@@ -1103,7 +1132,7 @@ void send_for_long_packge_serial_number(unsigned char *buf, int length)
 }
 
 unsigned char long_packge_version_version_and_name_AMS_lite[] = {0x03, 0x02, 0x01, 0x00, // version number (00.01.02.03)
-                                                                 0x41, 0x4D, 0x53, 0x5F, 0x46, 0x31, 0x30, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // AMS_F102 hw code name 
+                                                                 0x41, 0x4D, 0x53, 0x5F, 0x46, 0x31, 0x30, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // AMS_F102 hw code name
 unsigned char long_packge_version_version_and_name_AMS08[] = {0x31, 0x06, 0x00, 0x00, // version number (00.00.06.49)
                                                               0x41, 0x4D, 0x53, 0x30, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
@@ -1193,7 +1222,7 @@ void send_for_set_filament_type2(unsigned char *buf, int length)
     data.source_address = printer_data_long.target_address;
     data.target_address = printer_data_long.source_address;
     Bambubus_long_package_send(&data);
-    
+
 }
 
 BambuBus_package_type BambuBus_run()
@@ -1209,56 +1238,60 @@ BambuBus_package_type BambuBus_run()
         i->motion_set = idle;
     }*/
 
-    if (BambuBus_have_data)
+    if (queue_head != queue_tail)
     {
-        int data_length = BambuBus_have_data;
-        BambuBus_have_data = 0;
+        int data_length = packet_queue[queue_tail].length;
+        uint8_t* current_packet = packet_queue[queue_tail].data;
+
         need_debug = false;
         delay(1);
-        stu = get_packge_type(buf_X, data_length); // have_data
+        stu = get_packge_type(current_packet, data_length); // have_data
         switch (stu)
         {
         case BambuBus_package_type::heartbeat:
             time_set = timex + 1000;
             break;
         case BambuBus_package_type::filament_motion_short:
-            send_for_motion_short(buf_X, data_length);
+            send_for_motion_short(current_packet, data_length);
             break;
         case BambuBus_package_type::filament_motion_long:
             // need_debug=true;
-            send_for_motion_long(buf_X, data_length);
+            send_for_motion_long(current_packet, data_length);
             time_motion = timex + 1000;
             break;
         case BambuBus_package_type::online_detect:
-            send_for_online_detect(buf_X, data_length);
+            send_for_online_detect(current_packet, data_length);
             break;
         case BambuBus_package_type::REQx6:
-            // send_for_REQx6(buf_X, data_length);
+            // send_for_REQx6(current_packet, data_length);
             break;
         case BambuBus_package_type::MC_online:
-            send_for_long_packge_MC_online(buf_X, data_length);
+            send_for_long_packge_MC_online(current_packet, data_length);
             break;
         case BambuBus_package_type::read_filament_info:
-            send_for_long_packge_filament(buf_X, data_length);
+            send_for_long_packge_filament(current_packet, data_length);
             break;
         case BambuBus_package_type::version:
-            send_for_long_packge_version(buf_X, data_length);
+            send_for_long_packge_version(current_packet, data_length);
             break;
         case BambuBus_package_type::serial_number:
-            send_for_long_packge_serial_number(buf_X, data_length);
+            send_for_long_packge_serial_number(current_packet, data_length);
             break;
         case BambuBus_package_type::NFC_detect:
-            // send_for_NFC_detect(buf_X, data_length);
+            // send_for_NFC_detect(current_packet, data_length);
             break;
         case BambuBus_package_type::set_filament_info:
-            send_for_set_filament(buf_X, data_length);
+            send_for_set_filament(current_packet, data_length);
             break;
         case BambuBus_package_type::set_filament_info_type2:
-            send_for_set_filament_type2(buf_X,data_length);
+            send_for_set_filament_type2(current_packet,data_length);
             break;
         default:
             break;
         }
+
+        // Move tail forward
+        queue_tail = (queue_tail + 1) % QUEUE_SIZE;
     }
     if (timex > time_set)
     {
@@ -1282,4 +1315,3 @@ BambuBus_package_type BambuBus_run()
     // NFC_detect_run();
     return stu;
 }
-
