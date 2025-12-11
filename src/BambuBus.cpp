@@ -4,22 +4,36 @@
 CRC16 crc_16;
 CRC8 crc_8;
 
-// Reduce buffer size to save RAM for queue
+// Zero-copy Packet Buffering Implementation
 #define MAX_PACKET_SIZE 512
-uint8_t BambuBus_data_buf[MAX_PACKET_SIZE];
+// Increased pool size to 8 to avoid full/empty ambiguity issues with ring buffer
+#define POOL_SIZE 8
 
-// Packet Queue Implementation
-#define QUEUE_SIZE 4
 struct Packet {
     uint8_t data[MAX_PACKET_SIZE];
-    int length;
+    volatile int length;
 };
-Packet packet_queue[QUEUE_SIZE];
-volatile int queue_head = 0;
-volatile int queue_tail = 0;
+
+// Memory Pool
+Packet packet_pool_storage[POOL_SIZE];
+
+// Queue of Full Packets (ISR -> Main)
+Packet* volatile rx_queue[POOL_SIZE];
+volatile int rx_head = 0;
+volatile int rx_tail = 0;
+
+// Queue of Free Packets (Main -> ISR)
+Packet* volatile free_queue[POOL_SIZE];
+volatile int free_head = 0;
+volatile int free_tail = 0;
+
+// Current packet being filled in ISR
+Packet* volatile current_rx_packet = NULL;
 
 uint16_t BambuBus_address = 0;
-uint8_t BambuBus_AMS_num = 0; // 0~3 代表被识别为 A B C D
+// 0~3 代表被识别为 A B C D. Currently hardcoded to 0 (A).
+// TODO: Read GPIO or config to allow setting this for multi-AMS setups.
+uint8_t BambuBus_AMS_num = 0;
 uint8_t AMS_humidity_wet = 12; // 0~100(百分比湿度)
 
 struct _filament
@@ -70,10 +84,15 @@ void Bambubus_set_need_to_save()
 }
 void Bambubus_save()
 {
-    // Simple check: do not save if we are currently receiving data (heuristic)
-    // if (queue_head != queue_tail) return; // Maybe too strict?
+    // Retry mechanism:
+    // If we are currently receiving data (queue is not empty), defer save.
+    if (rx_head != rx_tail) {
+        return;
+    }
 
-    Flash_saves(&data_save, sizeof(data_save), use_flash_addr);
+    if (Flash_saves(&data_save, sizeof(data_save), use_flash_addr)) {
+        Bambubus_need_to_save = false; // Only clear flag if successful
+    }
 }
 
 int get_now_filament_num()
@@ -196,11 +215,25 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
     static uint8_t data_CRC8_index;
     unsigned char data = _RX_IRQ_data;
 
+    // Safety check: ensure we have a buffer
+    if (current_rx_packet == NULL) {
+        // Emergency recovery: try to get one from free queue
+        if (free_head != free_tail) {
+            current_rx_packet = free_queue[free_tail];
+            free_tail = (free_tail + 1) % POOL_SIZE;
+        } else {
+            // No buffers available! Drop byte.
+            return;
+        }
+    }
+
+    uint8_t* buf = current_rx_packet->data;
+
     if (_index == 0) // waitting for first data
     {
         if (data == 0x3D) // 0x3D-start
         {
-            BambuBus_data_buf[0] = 0x3D;
+            buf[0] = 0x3D;
             _RX_IRQ_crcx.restart();       // reset CRC8
             _RX_IRQ_crcx.add(0x3D);       // add 0x3D in CRC8
             data_length_index = 4;        // unknow package type,init length data to 4
@@ -211,7 +244,7 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
     }
     else // have 0x3D,normal data
     {
-        BambuBus_data_buf[_index] = data;
+        buf[_index] = data;
         if (_index == 1) // package type byte
         {
             if (data & 0x80) // short head package
@@ -255,15 +288,39 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
         if (_index >= length) // recv over,copy package data
         {
             _index = 0;
-            // Push to Queue
-            int next_head = (queue_head + 1) % QUEUE_SIZE;
-            if (next_head != queue_tail) // Queue not full
+            // Push to RX Queue
+            int next_rx_head = (rx_head + 1) % POOL_SIZE;
+            if (next_rx_head != rx_tail)
             {
-                memcpy(packet_queue[queue_head].data, BambuBus_data_buf, length);
-                packet_queue[queue_head].length = length;
-                queue_head = next_head;
+                current_rx_packet->length = length;
+                rx_queue[rx_head] = current_rx_packet;
+                rx_head = next_rx_head;
+
+                // Get new free buffer
+                if (free_head != free_tail) {
+                    current_rx_packet = free_queue[free_tail];
+                    free_tail = (free_tail + 1) % POOL_SIZE;
+                } else {
+                    // No free buffers! We must reuse the current one (dropping the packet we just received)
+                    // We invalidate current pointer to signal "lost" or just keep using it for next packet?
+                    // Reusing it for next packet means overwriting the one we just received if we didn't push it.
+                    // But we DID push it above (rx_queue[rx_head] = current_rx_packet).
+                    // So now rx_queue points to `current_rx_packet`'s memory.
+                    // If we reuse `current_rx_packet` for NEXT packet, we will overwrite the data we just pushed to rx_queue!
+                    // This is a race.
+
+                    // Correct behavior if NO free buffers:
+                    // We cannot push the current packet because we have no replacement for the next.
+                    // So we must DROP the current packet (undo the push) and keep `current_rx_packet` for the next attempt.
+
+                    // Undo push:
+                    int prev_rx_head = (rx_head - 1 + POOL_SIZE) % POOL_SIZE;
+                    rx_head = prev_rx_head; // Revert head movement
+                    // Effectively we dropped the packet.
+                }
+            } else {
+               // RX Queue full. Drop packet.
             }
-            // else: Queue full, drop packet (safer than overwriting current being read)
         }
     }
 }
@@ -359,6 +416,25 @@ void BambuBus_init()
     bool _init_ready = Bambubus_read();
     crc_8.reset(0x39, 0x66, 0, false, false);
     crc_16.reset(0x1021, 0x913D, 0, false, false);
+
+    // Initialize Packet Pool
+    // Fill free_queue but ensure we leave one slot empty so free_head != free_tail
+    // Wait, in ring buffer, if head == tail it is empty.
+    // If (head+1)%size == tail, it is full.
+    // So we can fill POOL_SIZE - 1 items.
+    // We have POOL_SIZE items.
+    // We take 1 for current_rx_packet.
+    // Remaining POOL_SIZE - 1 items go to free_queue.
+    // This perfectly fills the queue to capacity (full).
+
+    int i = 0;
+    for (; i < POOL_SIZE - 1; i++) {
+        free_queue[free_head] = &packet_pool_storage[i];
+        free_head = (free_head + 1) % POOL_SIZE;
+    }
+
+    // Take the last one for current_rx_packet
+    current_rx_packet = &packet_pool_storage[i];
 
     if (_init_ready)
     {
@@ -691,7 +767,7 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
                 if ((data_save.filament[read_num].motion_set == AMS_filament_motion::need_send_out) || (data_save.filament[read_num].motion_set == AMS_filament_motion::idle))
                 {
                     data_save.filament[read_num].motion_set = AMS_filament_motion::on_use;
-                    data_save.filament_read_num.meters_virtual_count = 0;
+                    data_save.filament[read_num].meters_virtual_count = 0;
                 }
                 else if (data_save.filament[read_num].motion_set == AMS_filament_motion::before_pull_back)
                 {
@@ -1055,7 +1131,7 @@ unsigned char long_packge_filament[] =
     {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x47, 0x46, 0x42, 0x30, 0x30, 0x00, 0x00, 0x00,
-        0x41, 0x42, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x41, 0x42, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0xDD, 0xB1, 0xD4, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x18, 0x01, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1100,7 +1176,7 @@ void send_for_long_packge_filament(unsigned char *buf, int length)
 unsigned char serial_number[] = {"STUDY0ONLY"};
 unsigned char long_packge_version_serial_number[] = {9, // length
                                                      'S', 'T', 'U', 'D', 'Y', 'O', 'N', 'L', 'Y', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // serial_number#2
                                                      0x30, 0x30, 0x30, 0x30,
                                                      0xFF, 0xFF, 0xFF, 0xFF,
@@ -1233,66 +1309,69 @@ BambuBus_package_type BambuBus_run()
 
     uint64_t timex = get_time64();
 
-    /*for (auto i : data_save.filament)
+    if (rx_head != rx_tail)
     {
-        i->motion_set = idle;
-    }*/
-
-    if (queue_head != queue_tail)
-    {
-        int data_length = packet_queue[queue_tail].length;
-        uint8_t* current_packet = packet_queue[queue_tail].data;
+        Packet* pkt = rx_queue[rx_tail];
+        int data_length = pkt->length;
+        uint8_t* current_buf = pkt->data;
 
         need_debug = false;
-        delay(1);
-        stu = get_packge_type(current_packet, data_length); // have_data
+
+        // Process packet
+        stu = get_packge_type(current_buf, data_length);
         switch (stu)
         {
         case BambuBus_package_type::heartbeat:
             time_set = timex + 1000;
             break;
         case BambuBus_package_type::filament_motion_short:
-            send_for_motion_short(current_packet, data_length);
+            send_for_motion_short(current_buf, data_length);
             break;
         case BambuBus_package_type::filament_motion_long:
-            // need_debug=true;
-            send_for_motion_long(current_packet, data_length);
+            send_for_motion_long(current_buf, data_length);
             time_motion = timex + 1000;
             break;
         case BambuBus_package_type::online_detect:
-            send_for_online_detect(current_packet, data_length);
+            send_for_online_detect(current_buf, data_length);
             break;
         case BambuBus_package_type::REQx6:
-            // send_for_REQx6(current_packet, data_length);
+            // send_for_REQx6(current_buf, data_length);
             break;
         case BambuBus_package_type::MC_online:
-            send_for_long_packge_MC_online(current_packet, data_length);
+            send_for_long_packge_MC_online(current_buf, data_length);
             break;
         case BambuBus_package_type::read_filament_info:
-            send_for_long_packge_filament(current_packet, data_length);
+            send_for_long_packge_filament(current_buf, data_length);
             break;
         case BambuBus_package_type::version:
-            send_for_long_packge_version(current_packet, data_length);
+            send_for_long_packge_version(current_buf, data_length);
             break;
         case BambuBus_package_type::serial_number:
-            send_for_long_packge_serial_number(current_packet, data_length);
+            send_for_long_packge_serial_number(current_buf, data_length);
             break;
         case BambuBus_package_type::NFC_detect:
-            // send_for_NFC_detect(current_packet, data_length);
+            // send_for_NFC_detect(current_buf, data_length);
             break;
         case BambuBus_package_type::set_filament_info:
-            send_for_set_filament(current_packet, data_length);
+            send_for_set_filament(current_buf, data_length);
             break;
         case BambuBus_package_type::set_filament_info_type2:
-            send_for_set_filament_type2(current_packet,data_length);
+            send_for_set_filament_type2(current_buf,data_length);
             break;
         default:
             break;
         }
 
-        // Move tail forward
-        queue_tail = (queue_tail + 1) % QUEUE_SIZE;
+        // Return buffer to free pool
+        int next_free_head = (free_head + 1) % POOL_SIZE;
+        if (next_free_head != free_tail) {
+            free_queue[free_head] = pkt;
+            free_head = next_free_head;
+        }
+
+        rx_tail = (rx_tail + 1) % POOL_SIZE;
     }
+
     if (timex > time_set)
     {
         stu = BambuBus_package_type::ERROR; // offline
@@ -1309,7 +1388,7 @@ BambuBus_package_type BambuBus_run()
     {
         Bambubus_save();
         time_set = get_time64() + 1000;
-        Bambubus_need_to_save = false;
+        // Do NOT clear flag here. Bambubus_save clears it if successful.
     }
 
     // NFC_detect_run();

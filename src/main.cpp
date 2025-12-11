@@ -91,29 +91,57 @@ void setup()
     delay(1);
 }
 
+// Rate limiting for LED updates to prevent blocking UART interrupts too frequently
+static unsigned long last_led_update_time[4] = {0, 0, 0, 0};
+static unsigned long last_sys_led_update_time = 0;
+#define LED_UPDATE_INTERVAL_MS 50
+
 void Set_MC_RGB(uint8_t channel, int num, uint8_t R, uint8_t G, uint8_t B)
 {
     int set_colors[3] = {R, G, B};
     bool is_new_colors = false;
 
+    // Check if color actually changed
     for (int colors = 0; colors < 3; colors++)
     {
         if (channel_runs_colors[channel][num][colors] != set_colors[colors]) {
-            channel_runs_colors[channel][num][colors] = set_colors[colors]; // 记录新颜色
-            is_new_colors = true; // 颜色有更新
+            is_new_colors = true;
         }
     }
-    // 检查每个通道，如果有改变，更新它。
+
     if (is_new_colors) {
+        // Rate Limiting Logic:
+        // Only proceed if enough time passed to avoid UART blocking storm
+        unsigned long now = get_time64();
+        if (now - last_led_update_time[channel] < LED_UPDATE_INTERVAL_MS) {
+            return; // Skip update. Internal state NOT updated, so next call will retry.
+        }
+
+        // Update stored colors ONLY when we actually update the hardware
+        for (int colors = 0; colors < 3; colors++) {
+            channel_runs_colors[channel][num][colors] = set_colors[colors];
+        }
+
         strip_channel[channel].setPixelColor(num, strip_channel[channel].Color(R, G, B));
-        strip_channel[channel].show(); // 显示新颜色
-        is_new_colors = false; // 重置状态
+        strip_channel[channel].show(); // Blocks interrupts
+        last_led_update_time[channel] = now;
     }
 }
+
+// Redirect macro to new function
+#undef MC_STU_RGB_set
+#undef MC_PULL_ONLINE_RGB_set
+#define MC_STU_RGB_set(channel, R, G, B) Set_MC_RGB(channel, 0, R, G, B)
+#define MC_PULL_ONLINE_RGB_set(channel, R, G, B) Set_MC_RGB(channel, 1, R, G, B)
+
 
 bool MC_STU_ERROR[4] = {false, false, false, false};
 void Show_SYS_RGB(int BambuBUS_status)
 {
+    unsigned long now = get_time64();
+    // Also rate limit System LED
+    if (now - last_sys_led_update_time < LED_UPDATE_INTERVAL_MS) return;
+
     // 更新主板RGB灯
     if (BambuBUS_status == -1) // 离线
     {
@@ -125,14 +153,16 @@ void Show_SYS_RGB(int BambuBUS_status)
         strip_PD1.setPixelColor(0, strip_PD1.Color(8, 9, 9)); // 白色
         strip_PD1.show();
     }
+
+    last_sys_led_update_time = now;
+
     // 更新错误通道，亮起红灯
     for (int i = 0; i < 4; i++)
     {
         if (MC_STU_ERROR[i])
         {
-            // 红色
-            strip_channel[i].setPixelColor(0, strip_channel[i].Color(255, 0, 0));
-            strip_channel[i].show(); // 显示新颜色
+            // Reuse safe function for channel LEDs
+            MC_STU_RGB_set(i, 255, 0, 0);
         }
     }
 }
