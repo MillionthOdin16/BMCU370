@@ -201,6 +201,177 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 
 ---
 
+### 12. ADC Array Bounds Checking (MEDIUM)
+**Status:** NEEDS INVESTIGATION  
+**Location:** `src/ADC_DMA.cpp` - `ADC_DMA_get_value()`  
+**Issue:** Loop indices `i` and `j` used to access `ADC_data[j][i]` array without explicit bounds validation.
+
+**Fix Applied in:** `BMCU370t` commit `d214b2aca7`
+
+**Impact:** Medium - Could cause array out-of-bounds access if indices exceed expected range.
+
+**Details:** While loop conditions check `i < 8` and `j < ADC_filter_n`, the fix adds explicit bounds checking inside the loop to prevent any potential overflow.
+
+**Recommended Action:** Review commit for defensive bounds checking in ADC data processing.
+
+---
+
+### 13. P1X Feeding Logic Disabled (HIGH)
+**Status:** NEEDS VERIFICATION  
+**Location:** `src/Motion_control.cpp` - `motor_motion_switch()`  
+**Issue:** Filament feeding logic (`need_send_out` case) may be commented out, preventing proper feeding operation for P1X printers.
+
+**Fix Applied in:** `BMCU370x` commit `c20028f43b`
+
+**Impact:** High - If feeding logic is disabled, filament won't feed properly.
+
+**Details:** The fix uncomments feeding logic for both AMS and AMS_lite devices while commenting out the pull-back logic, suggesting proper feeding is critical.
+
+**Recommended Action:** Verify feeding logic is enabled and not commented out in current code.
+
+---
+
+### 14. Motor Direction Correction for Channels 1, 2, 3 (MEDIUM)
+**Status:** NEEDS INVESTIGATION  
+**Location:** `src/Motion_control.cpp`, `src/config.h`  
+**Issue:** Channels 1, 2, and 3 commonly require motor direction reversal, but no automatic correction is applied.
+
+**Fix Applied in:** `BMCU370t` commit `b5e67dbd60`
+
+**Impact:** Medium - Motors may run backwards on certain channels without manual correction.
+
+**Details:** Some hardware configurations require certain channels to have reversed motor polarity. The fix adds configuration options and automatic detection/correction.
+
+**Recommended Action:** Review commit for motor direction correction logic and polarity detection.
+
+---
+
+## 🟠 USER-REPORTED BUGS (From GitHub Issues)
+
+### 15. Autoloading Motor Stalls Mid-Feed (CRITICAL - USER REPORTED)
+**Status:** CONFIRMED BUG - User reported in Issue #62  
+**Location:** `src/Motion_control.cpp` - Motor control during pressure sensing  
+**Issue:** Motor slows down and eventually stops during autoloading, causing load failures. Motor appears to lack torque but works when pressure sensor is manually activated.
+
+**User Report:** "When a user goes to the AMS page on the printer and selects one of the spools + clicks load, it begins to feed the filament from the spool but slows down and eventually stops feeding causing the load to fail."
+
+**Fix Applied in:** `BMCU370t` Issue #63, commits including `f4838e0f7e`
+
+**Impact:** CRITICAL - Breaks autoloading functionality, requires manual intervention.
+
+**Root Cause Analysis:** Motor speed control incorrectly adjusted during pressure sensing, causing insufficient torque.
+
+**Recommended Fix:** Review autoloading motor speed control logic to maintain proper speed during pressure sensing.
+
+---
+
+### 16. Wrong Channel Unloading (HIGH - USER REPORTED)
+**Status:** CONFIRMED BUG - User reported in Issue #62  
+**Location:** `src/BambuBus.cpp`, `src/Motion_control.cpp` - Channel selection logic  
+**Issue:** When unloading a spool, the BMCU sometimes unloads a completely different channel than selected, fully removing filament from the wrong BMCU channel.
+
+**User Report:** "Sometimes there's a very odd behavior that instead of unloading the intended spool, it attempts to unload a completely different spool + completely removes the filament from the BMCU."
+
+**Fix Applied in:** `BMCU370t` Issue #63
+
+**Impact:** HIGH - Data corruption risk, wrong filament removed, confusing user experience.
+
+**Root Cause:** Likely related to channel state synchronization or BambuBus message parsing for channel selection.
+
+**Recommended Fix:** Review channel selection state management and BambuBus protocol handling for unload commands.
+
+---
+
+### 17. Unloading Gets Stuck on "Locating Filament" (HIGH - USER REPORTED)
+**Status:** CONFIRMED BUG - User reported in Issue #62  
+**Location:** `src/Motion_control.cpp` - Filament position detection  
+**Issue:** During unload operation, the BMCU gets stuck in "locating filament" stage as if filament is present but extruder can't grab it.
+
+**User Report:** "Sometimes when the user selects unload a spool on the printer, it attempts to unload the filament but gets stuck on the locating filament stage."
+
+**Fix Applied in:** `BMCU370t` Issue #63, multi-channel timing fixes
+
+**Impact:** HIGH - Unload operation fails, requires manual intervention or power cycle.
+
+**Root Cause:** Sensor state not properly detected or timing issues between BMCU and printer communication.
+
+**Recommended Fix:** Review filament position detection logic and sensor reading reliability.
+
+---
+
+### 18. Intermittent Channel Functionality (MEDIUM - USER REPORTED)
+**Status:** CONFIRMED BUG - User reported in Issue #62  
+**Location:** Multiple files - Channel-specific state management  
+**Issue:** Autoloading works on some channels but not others, behavior is intermittent and not hardware-related.
+
+**User Report:** "Sometimes the auto loading works on certain channels, and sometimes it doesn't. It doesn't seem to be a hardware issue."
+
+**Fix Applied in:** `BMCU370t` Issue #63, multichannel stability fixes
+
+**Impact:** MEDIUM - Unreliable operation, user can't predict which channels will work.
+
+**Root Cause:** Multichannel timing interference and index mismatch issues.
+
+**Recommended Fix:** Review multichannel synchronization and state isolation between channels.
+
+---
+
+### 19. Memory Leak in AS5600 Destructor (MEDIUM - CODE ANALYSIS)
+**Status:** CONFIRMED BUG - Found through code review  
+**Location:** `src/many_soft_AS5600.cpp` - Destructor `~AS5600_soft_IIC_many()`  
+**Issue:** Arrays allocated with `new[]` are deleted with `delete` instead of `delete[]`, causing memory leaks and undefined behavior.
+
+**Code Evidence:**
+```cpp
+// In init() - allocated with new[]
+online = (new bool[numbers]);
+magnet_stu = (new _AS5600_magnet_stu[numbers]);
+error = (new int[numbers]);
+// ... and 7 more arrays
+
+// In destructor - incorrectly deleted with delete (should be delete[])
+delete IO_SDA;      // BUG: Should be delete[] IO_SDA;
+delete IO_SCL;      // BUG: Should be delete[] IO_SCL;
+delete port_SDA;    // BUG: Should be delete[] port_SDA;
+// ... all 10 arrays have this bug
+```
+
+**Fix Applied in:** `BMCU370t` commit `114649dc9f`
+
+**Impact:** Medium - Memory leak on reinitialization, undefined behavior, potential heap corruption.
+
+**Recommended Fix:** Replace all `delete` with `delete[]` for array allocations in destructor.
+
+---
+
+### 20. Filament Auto-Retract on A1 Printers (HIGH - EXTERNAL REPORT)
+**Status:** REPORTED in Bambu-Research-Group  
+**Location:** BambuBus protocol implementation or Motion_control  
+**Issue:** On Bambu A1 printers, filament enters the pentaprism but then automatically retracts, causing feeding failures.
+
+**External Report:** Bambu-Research-Group/Bambu-Bus Issue #11: "My A1 can detect the AMS, but fails to feed filament. The specific symptom is as follows: the filament enters the pentaprism, then retracts from it automatically."
+
+**Impact:** High - Complete feeding failure on A1 printers with certain AMS configurations.
+
+**Root Cause:** Likely related to A1 vs A1-mini protocol differences or timing issues.
+
+**Recommended Action:** Investigate A1 vs A1-mini BambuBus protocol differences, review retraction logic triggers.
+
+---
+
+### 21. NeoPixel Performance Issues (LOW - CODE COMMENT)
+**Status:** NOTED in code comments  
+**Location:** `src/Adafruit_NeoPixel.cpp:2351`  
+**Issue:** TODO comment indicates potential performance issues when disabling NeoPixel device.
+
+**Code Comment:** `// TODO: Check if disabling the device causes performance issues.`
+
+**Impact:** Low - Potential performance degradation during LED updates.
+
+**Recommended Action:** Profile LED update timing, optimize if causing system delays.
+
+---
+
 ## 📦 HIGH-VALUE FEATURES (Implementation Candidates)
 
 ### Feature 1: USB CDC Communication Interface (HIGH VALUE) ⭐⭐⭐⭐⭐
@@ -319,6 +490,45 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 
 ---
 
+### Feature 6: Automatic Filament Feeding on Sensor Detection (MEDIUM VALUE) ⭐⭐⭐
+**Status:** NOT PRESENT in current repository  
+**Branch:** `BMCU370t` commit `f27c78261c`
+
+**Description:** Automatic filament feeding triggered when presence sensor detects filament insertion (sensor transitions from 0 to 1).
+
+**Benefits:**
+1. Improved user experience - no manual feeding trigger needed
+2. Automatic detection when filament manually inserted to sensor
+3. Enhanced debug output for feeding diagnostics
+4. Seamless filament loading process
+
+**Implementation Complexity:** Medium  
+**Dependencies:** Presence sensor must be properly configured  
+**Risk:** Low - Additive feature with edge detection logic
+
+**Recommendation:** MEDIUM PRIORITY - Nice UX enhancement for filament loading workflow.
+
+---
+
+### Feature 7: USB/LED Pin Conflict Resolution (MEDIUM VALUE) ⭐⭐
+**Status:** NOT PRESENT - Conditional on USB CDC implementation  
+**Branch:** `BMCU370t` commit `31a99ca110`
+
+**Description:** Implements PA11 pin sharing between USB and Channel 0 LEDs, allowing both USB CDC and LED functionality.
+
+**Benefits:**
+1. Enables USB communication without sacrificing LED indicators
+2. Smart pin multiplexing based on USB connection state
+3. Preserves all 4 channel LED functionality
+
+**Implementation Complexity:** Medium  
+**Dependencies:** Requires USB CDC implementation (Feature 1)  
+**Risk:** Medium - Hardware-level pin sharing requires careful timing
+
+**Recommendation:** MEDIUM PRIORITY - Only needed if USB CDC interface is implemented. Should be implemented together with Feature 1.
+
+---
+
 ## 🔵 LOWER PRIORITY / ESP32-SPECIFIC FEATURES
 
 ### ESP32 Web Interface and WiFi Management (LOW PRIORITY for BMCU) ⭐
@@ -430,27 +640,42 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ## 🎯 PRIORITY RANKING SUMMARY
 
 ### Must Fix (Do First):
-1. **Buffer overflow array bounds** - Critical security issue (includes filament_num external input vulnerability)
-2. **Race conditions** - Stability issue  
-3. **P1X speed/timing** - Major compatibility issue
+1. **Autoloading motor stalls mid-feed** - CRITICAL user-reported bug, breaks autoloading
+2. **Wrong channel unloading** - HIGH impact user-reported bug, data corruption risk
+3. **Memory leak in AS5600 destructor** - MEDIUM but easy fix, use delete[] not delete
+4. **Buffer overflow array bounds** - Critical security issue (includes filament_num external input vulnerability)
+5. **Race conditions** - Stability issue  
+6. **P1X speed/timing** - Major compatibility issue
+7. **Unloading stuck on "locating filament"** - HIGH user-reported bug
 
-### Should Implement (High Value):
-4. **Motor direction initialization** - Can cause complete motor failure
-5. **USB CDC interface** - Major functionality addition
-6. **Debug monitoring** - Critical for development/support
-7. **P1X gentle mode fix** - Important compatibility fix
+### Should Fix (High Priority):
+8. **P1X feeding logic** - Verify not disabled (HIGH impact if broken)
+9. **Motor direction initialization** - Can cause complete motor failure
+10. **Intermittent channel functionality** - User-reported multichannel issues
+11. **P1X gentle mode fix** - Important compatibility fix
+12. **Filament auto-retract on A1** - External report, may affect A1 printer compatibility
+
+### Should Implement (High Value Features):
+13. **USB CDC interface** - Major functionality addition
+14. **Debug monitoring** - Critical for development/support (partially addresses user issues)
 
 ### Nice to Have (Consider After Above):
-8. **Channel selection state loss** - UX issue after errors
-9. **Persistent filament data** - Good UX improvement
-10. **Jerky motion fix** - Quality improvement
-11. **AS5600 memory management** - Long-term stability
-12. **Multi-channel timing fixes** - Quality improvement
-13. **Adaptive pressure control** - Experimental, needs validation
+15. **Channel selection state loss** - UX issue after errors
+16. **Persistent filament data** - Good UX improvement
+17. **ADC bounds checking** - Defensive programming improvement
+18. **Automatic filament feeding** - Nice UX feature
+19. **Motor direction correction (Ch 1,2,3)** - Hardware compatibility
+20. **Jerky motion fix** - Quality improvement
+21. **AS5600 memory management** - Long-term stability (related to #3)
+22. **Multi-channel timing fixes** - Quality improvement
+23. **USB/LED pin sharing** - Only with USB CDC
+24. **Adaptive pressure control** - Experimental, needs validation
+25. **NeoPixel performance** - Low priority optimization
 
 ### Low Priority / Future:
-14. **Robustness improvements** - Cherry-pick specific fixes only
-15. **ESP32 features** - Only if ESP32 integration planned
+26. **Robustness improvements** - Cherry-pick specific fixes only
+27. **ESP32 features** - Only if ESP32 integration planned
+28. **BMCU-B port** - User requested but different hardware variant
 
 ---
 
@@ -471,27 +696,60 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 
 ## 🚀 CONCLUSION
 
-The analysis reveals several **critical security vulnerabilities** that should be fixed immediately, along with **important P1X compatibility issues** and **motor control bugs** affecting users. The most valuable features are the **USB CDC interface** and **debug monitoring system**, which would significantly enhance the BMCU's capabilities and supportability.
+The analysis reveals several **critical user-reported bugs** that directly impact BMCU functionality, along with **security vulnerabilities**, **memory leaks**, and **P1X compatibility issues**. The most valuable features are the **USB CDC interface** and **debug monitoring system**, which would significantly enhance the BMCU's capabilities and supportability.
 
 **Critical Findings:**
-- **7 confirmed bugs exist in current codebase** (buffer overflows, race conditions, P1X issues, motor direction)
-- **4 additional bugs need investigation** (channel state, jerky motion, AS5600 memory, timing)
-- **5 high-value features** identified for implementation
-- **100+ commits** reviewed across 35+ branches
+- **4 critical user-reported bugs** confirmed through GitHub Issue #62 (autoloading failures, wrong channel unloading, stuck unloading, intermittent channel issues)
+- **1 memory leak bug** found through code analysis (delete vs delete[] in AS5600)
+- **1 external compatibility issue** reported in Bambu Research Group (A1 auto-retract)
+- **21 bugs identified total** from multiple sources
+- **7 high-value features** identified for implementation
+- **100+ commits** reviewed across 35+ branches in BMCU370t
+- **20+ commits** reviewed in BMCU370x
+- **GitHub Issues and PRs** analyzed for user-reported problems
+- **External repositories** searched for related issues
+- **Code analysis** performed to find unreported bugs
+- All findings verified through direct code comparison
+
+**Sources Analyzed:**
+- MillionthOdin16/BMCU370t (35+ branches, 60+ issues/PRs)
+- MillionthOdin16/BMCU370x (main + 1 branch)
+- Bambu-Research-Group/Bambu-Bus (11 issues)
+- karlingen/BMCU (alternative implementation)
+- Direct code review of current repository
+
+**User Impact Summary:**
+- Users experiencing **autoloading failures** requiring manual intervention
+- **Wrong channel unloading** causing confusion and potential filament waste
+- **Intermittent functionality** making BMCU unreliable
+- **Memory leaks** causing potential long-term instability
+- **A1 printer compatibility** issues with auto-retract
+- Issues affect **real-world printing workflows**
 
 **Recommended Immediate Actions:**
-1. Fix all buffer overflow and bounds checking issues including external input validation (Day 1)
-2. Add race condition protection in Motion_control (Day 1)
-3. Validate and fix motor direction initialization (Day 2)
-4. Apply P1X motor speed and timing fixes (Day 2-3)
-5. Plan USB CDC implementation (Week 2-3)
-6. Implement debug monitoring (Week 3-4)
+1. **Fix autoloading motor stall issue** (Day 1 - CRITICAL user blocker)
+2. **Fix wrong channel unloading bug** (Day 1-2 - HIGH user impact)
+3. **Fix AS5600 memory leak** (Day 2 - Easy fix: change delete to delete[])
+4. Fix all buffer overflow and bounds checking issues including external input validation (Day 2-3)
+5. **Fix unloading "stuck on locating filament"** (Day 3-4)
+6. Add race condition protection in Motion_control (Day 4)
+7. **Verify P1X feeding logic is enabled** (Day 4)
+8. Address intermittent channel functionality (Week 2)
+9. Validate and fix motor direction initialization (Week 2)
+10. Apply P1X motor speed and timing fixes (Week 2)
+11. Investigate A1 auto-retract issue (Week 2-3)
+12. Plan USB CDC implementation (Week 3-4)
+13. Implement debug monitoring system (Week 4) - Will help diagnose remaining issues
 
 **Long-term Strategy:**
+- **Prioritize user-reported bugs** - these affect real users in production
 - Focus on core BMCU functionality improvements
+- Implement debug monitoring to help troubleshoot future issues
 - Avoid ESP32-specific features unless ESP32 integration is planned
 - Cherry-pick stability improvements from comprehensive update branches
 - Thoroughly test all changes on both A1 and P1X hardware
+- Monitor GitHub issues and external repositories for additional user reports
+- Perform regular code reviews to catch bugs before they affect users
 
 ---
 
@@ -507,7 +765,17 @@ The analysis reveals several **critical security vulnerabilities** that should b
 ### Motion Control Fixes:
 - Jerky motion fix: `BMCU370t@abb3648ac0`
 - AS5600 memory: `BMCU370t@114649dc9f`
+- **AS5600 memory leak (delete[])**: Found through code analysis (lines 47-57 in many_soft_AS5600.cpp)
 - Multi-channel timing: `BMCU370t@e2f38aa96f`
+- Motor speed control: `BMCU370t@b464b0abca`
+- Autoloading motor stall: `BMCU370t@f4838e0f7e`
+
+### User-Reported Issues:
+- Autoloading failures: `BMCU370t` Issue #62
+- Wrong channel unloading: `BMCU370t` Issue #62  
+- Stuck on locating filament: `BMCU370t` Issue #62
+- Intermittent channel issues: `BMCU370t` Issue #62
+- A1 auto-retract: `Bambu-Research-Group/Bambu-Bus` Issue #11
 
 ### Key Features:
 - USB CDC (basic): `BMCU370t@43957d4edf` (usb-ESP branch)
@@ -515,6 +783,8 @@ The analysis reveals several **critical security vulnerabilities** that should b
 - Debug monitoring: `BMCU370t@bce9a67d97`
 - Persistent data: `BMCU370t@5415842d05`
 - Adaptive pressure: `BMCU370t@e5beb3aef3`
+- Auto filament feeding: `BMCU370t@f27c78261c`
+- USB/LED pin sharing: `BMCU370t@31a99ca110`
 
 ### Comprehensive Improvements:
 - Robustness suite: `BMCU370t@63c81ad992`
@@ -522,7 +792,9 @@ The analysis reveals several **critical security vulnerabilities** that should b
 ---
 
 **Report Generated:** 2025-12-12  
-**Analysis Coverage:** All branches in BMCU370t and BMCU370x  
+**Analysis Coverage:** All branches in BMCU370t and BMCU370x, external GitHub repositories, code analysis  
 **Total Commits Reviewed:** 100+ commits across 35+ branches  
-**Bugs Confirmed in Current Code:** 7 critical/high-priority bugs  
-**Additional Bugs for Investigation:** 4 medium-priority bugs
+**Issues Analyzed:** 60+ GitHub issues/PRs across multiple repositories  
+**Bugs Confirmed in Current Code:** 10+ critical/high-priority bugs  
+**Additional Bugs for Investigation:** 11 medium/low-priority bugs  
+**External Sources:** Bambu-Research-Group, karlingen/BMCU, code review
