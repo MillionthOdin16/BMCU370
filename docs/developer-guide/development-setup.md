@@ -37,7 +37,7 @@ Download and install VS Code from: https://code.visualstudio.com/
 ```bash
 git clone https://github.com/MillionthOdin16/BMCU370.git
 cd BMCU370
-```
+```bash
 
 Or clone the original:
 ```bash
@@ -263,7 +263,7 @@ BMCU370/
 │   └── time64.h           # Time header
 ├── docs/                  # Documentation (this directory)
 └── .pio/                  # PlatformIO build artifacts (ignored)
-```
+```bash
 
 ## Development Workflow
 
@@ -431,7 +431,7 @@ Modify `platformio.ini` for different boards:
 ```ini
 [env:custom_variant]
 board = genericCH32V203C8T6
-build_flags = 
+build_flags =
     -D SYSCLK_FREQ_144MHz_HSI=144000000
     -D CUSTOM_HARDWARE_V2
 ```
@@ -482,9 +482,8 @@ build_flags =
 
 After setting up your environment:
 1. Read [Architecture Overview](architecture.md)
-2. Explore [Code Reference](code-reference.md)
-3. Study [BambuBus Protocol](bambubus-protocol.md)
-4. Make your first code change and test!
+2. Study [BambuBus Protocol](bambubus-protocol.md)
+3. Make your first code change and test!
 
 ---
 

@@ -20,7 +20,7 @@ This document lists all components required to build a complete BMCU-C 370 Hall 
 - **Quantity:** 1
 - **PCB Type:** 4-layer recommended
 - **Source:** [OSHWHub - BMCU](https://oshwhub.com/bamboo-shoot-xmcu-pcb-team/bmcu)
-- **Notes:** 
+- **Notes:**
   - Multiple variants available (standard, Type-C, Xing-C modified)
   - Hall version compatible with all mainboard variants
   - Ensure proper component population (see assembly guide)
@@ -96,7 +96,7 @@ This document lists all components required to build a complete BMCU-C 370 Hall 
 - **Shaft Diameter:** 2mm
 - **Voltage:** 24V DC
 - **No-load Speed:** ~6000 RPM
-- **Notes:** 
+- **Notes:**
   - Much more powerful than 130/180 motors
   - More noise but better performance
   - Ensure shaft compatible with gears
@@ -107,7 +107,7 @@ This document lists all components required to build a complete BMCU-C 370 Hall 
 - **Quantity:** 4 sets (8 gears total)
 - **Type:** BMG-style dual-drive
 - **Material:** POM or nylon
-- **Notes:** 
+- **Notes:**
   - Quieter than metal
   - Less filament chewing
   - Adequate for most filaments
@@ -170,9 +170,9 @@ This document lists all components required to build a complete BMCU-C 370 Hall 
 **Specification:** 0.5mm wire × 6mm OD × 10mm length
 - **Quantity:** 4
 - **Wire Diameter:** 0.5mm
-- **Outer Diameter:** 6mm  
+- **Outer Diameter:** 6mm
 - **Free Length:** 10mm
-- **Notes:** 
+- **Notes:**
   - Primary buffer spring
   - A-series and P-series internal five-way version
 
@@ -244,11 +244,11 @@ This document lists all components required to build a complete BMCU-C 370 Hall 
 
 **Specification:** PH2.0 connectors, various pin counts
 - **Quantity:** 4 sets
-- **Lengths:** 
+- **Lengths:**
   - Channels 3-4: 8cm recommended
   - Channels 1-2: 5cm recommended
   - Alternative: All 8cm (less neat but functional)
-- **Notes:** 
+- **Notes:**
   - Pre-made cables or crimp your own
   - Longer cables easier for assembly but less tidy
 
@@ -259,7 +259,7 @@ This document lists all components required to build a complete BMCU-C 370 Hall 
 - **Length:** Depends on printer distance (typically 1-2m)
 - **Wires:** 6-conductor (A, B, GND, 24V, +2 spare)
 - **Connector:** 6-pin JST or compatible
-- **Notes:** 
+- **Notes:**
   - May come with printer or need to source separately
   - Ensure proper pin mapping
 
@@ -306,7 +306,7 @@ This document lists all components required to build a complete BMCU-C 370 Hall 
 - **Infill:** 20-30%
 - **Walls:** 3-4 perimeters
 - **Support:** Required for some parts
-- **Notes:** 
+- **Notes:**
   - PETG recommended for heat resistance
   - ABS for higher strength
   - PLA adequate for testing
@@ -444,7 +444,7 @@ Most parts available from:
 
 ---
 
-**Last Updated:** 2025-12-12  
+**Last Updated:** 2025-12-12
 **Version:** BMCU-C 370 Hall V0.1-0020
 
 **Note:** This BOM is community-maintained. Please verify specifications against current hardware designs and report any discrepancies.

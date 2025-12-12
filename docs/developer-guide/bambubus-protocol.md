@@ -174,7 +174,7 @@ enum class BambuBus_package_type {
     heartbeat,                 // Keepalive packet
     ETC                        // Miscellaneous packets
 };
-```
+```cpp
 
 ### Device Types
 
@@ -223,7 +223,7 @@ State: VALIDATING_CRC16
 State: PACKET_COMPLETE
   ↓ (copy to buffer, set have_data flag)
 State: WAITING_START (loop)
-```
+```cpp
 
 ### Transmission
 
@@ -234,10 +234,10 @@ void send_uart(const unsigned char *data, uint16_t length) {
     Bambubus_DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)data;
     Bambubus_DMA_InitStructure.DMA_BufferSize = length;
     DMA_Init(DMA1_Channel4, &Bambubus_DMA_InitStructure);
-    
+
     // 2. Enable transmit mode (set DE pin high)
     GPIOA->BSHR = GPIO_Pin_12;
-    
+
     // 3. Start DMA transfer
     DMA_Cmd(DMA1_Channel4, ENABLE);
     USART_DMACmd(USART1, USART_DMAReq_Tx, ENABLE);
@@ -310,7 +310,7 @@ enum class AMS_filament_stu {
     online,       // Filament present and ready
     NFC_waiting   // Waiting for NFC read (not used in BMCU)
 };
-```
+```cpp
 
 ### Motion States
 
@@ -339,11 +339,11 @@ idle → need_send_out → on_use → before_pull_back → need_pull_back → id
 void BambuBus_init() {
     // 1. Load saved filament data from flash
     bool init_ready = Bambubus_read();
-    
+
     // 2. Initialize CRC calculators
     crc_8.reset(0x39, 0x66, 0, false, false);
     crc_16.reset(0x1021, 0x913D, 0, false, false);
-    
+
     // 3. If flash data valid, load colors
     if (init_ready) {
         for (int i = 0; i < 4; i++) {
@@ -356,7 +356,7 @@ void BambuBus_init() {
         // Initialize with default colors (Red, Green, Blue, Yellow)
         // ... (default initialization code)
     }
-    
+
     // 4. Initialize UART hardware
     BambuBUS_UART_Init();
 }
@@ -370,7 +370,7 @@ BambuBus_package_type BambuBus_run() {
     if (BambuBus_have_data > 0) {
         // 2. Parse packet type
         BambuBus_package_type type = parse_packet(buf_X);
-        
+
         // 3. Handle packet based on type
         switch (type) {
             case online_detect:
@@ -392,17 +392,17 @@ BambuBus_package_type BambuBus_run() {
                 break;
             // ... other cases
         }
-        
+
         // 4. Clear received flag
         BambuBus_have_data = 0;
         return type;
     }
-    
+
     // 5. Check for timeout (offline detection)
     if (timeout_exceeded()) {
         return BambuBus_package_type::ERROR;
     }
-    
+
     return BambuBus_package_type::NONE;
 }
 ```
@@ -502,9 +502,9 @@ if (_index >= 999) {  // Buffer size limit
 ### Potential Changes by Bambu Lab
 
 ⚠️ **Firmware-based blocking:** Printer may reject non-official devices
-⚠️ **Protocol encryption:** Could add encryption to prevent DIY devices  
-⚠️ **Authentication:** May require signing or certificates  
-⚠️ **Different protocol version:** Major changes could break compatibility  
+⚠️ **Protocol encryption:** Could add encryption to prevent DIY devices
+⚠️ **Authentication:** May require signing or certificates
+⚠️ **Different protocol version:** Major changes could break compatibility
 
 **Mitigation:**
 - Keep BMCU firmware updated
@@ -644,7 +644,6 @@ DMA1 Channel 4 (USART1 TX):
 
 - [Architecture Overview](architecture.md)
 - [Development Setup](development-setup.md)
-- [Code Reference](code-reference.md)
 
 ---
 

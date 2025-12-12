@@ -75,7 +75,7 @@ void setup() {
     6. Initialize debug logging (if enabled)
     7. Initialize motion control system
 }
-```
+```cpp
 
 **Main Loop Flow:**
 ```cpp
@@ -105,7 +105,7 @@ void loop() {
 - **Data Format:** Custom binary protocol
 - **Start Byte:** 0x3D
 - **CRC:** CRC8 (polynomial 0x39, initial 0x66) + CRC16
-- **Device Types:** 
+- **Device Types:**
   - AMS (0x0700)
   - AMS Lite (0x1200)
 
@@ -128,7 +128,7 @@ enum class BambuBus_package_type {
     heartbeat,               // Keepalive packet
     ETC                      // Other packets
 };
-```
+```cpp
 
 **Filament Data Structure:**
 ```cpp
@@ -206,7 +206,7 @@ PULL_voltage_down = 1.45f;  // Low pressure (blue LED)
 < 0.6V  = Offline
 1.4-1.7V = Outer switch (assist feed needed)
 > 2.2V  = Both switches (fully loaded)
-```
+```cpp
 
 **Motor Control States:**
 ```cpp
@@ -688,9 +688,7 @@ Priority 2
 ## Next Steps
 
 - [BambuBus Protocol](bambubus-protocol.md) - Deep dive into communication
-- [Hall Sensor System](hall-sensor.md) - AS5600 details
-- [Motor Control](motor-control.md) - Motion control algorithms
-- [Code Reference](code-reference.md) - API documentation
+- [Architecture Overview](architecture.md) - Complete system documentation
 
 ---
 

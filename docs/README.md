@@ -9,30 +9,22 @@ This directory contains comprehensive technical and user documentation for the B
 - [Hardware Overview](user-guide/hardware-overview.md) - Understanding the hardware components
 - [Installation Guide](user-guide/installation.md) - Step-by-step installation instructions
 - [Troubleshooting](user-guide/troubleshooting.md) - Common issues and solutions
-- [Maintenance Guide](user-guide/maintenance.md) - Keeping your BMCU-C running smoothly
 
 ### Developer Documentation
 - [Development Environment Setup](developer-guide/development-setup.md) - Setting up your development environment
 - [Architecture Overview](developer-guide/architecture.md) - System architecture and design
 - [BambuBus Protocol](developer-guide/bambubus-protocol.md) - Communication protocol details
-- [Hall Sensor System](developer-guide/hall-sensor.md) - AS5600 Hall sensor implementation
-- [Motor Control](developer-guide/motor-control.md) - Motion control system
-- [RGB LED System](developer-guide/rgb-leds.md) - LED control and status indication
-- [Code Reference](developer-guide/code-reference.md) - API and function reference
 
 ### Hardware Documentation
-- [PCB Specifications](hardware/pcb-specs.md) - PCB design and specifications
 - [Bill of Materials](hardware/bom.md) - Complete parts list
-- [Wiring Diagrams](hardware/wiring.md) - Connection diagrams
-- [Sensor Specifications](hardware/sensors.md) - Hall sensor and ADC details
 
 ## About This Project
 
 BMCU-C is the latest generation of the BMCU (Bambu Multi-Color Unit) project, featuring 370 motors and Hall effect sensors for improved reliability and performance.
 
-**Version:** BMCU-C 370 Hall V0.1-0020  
-**Microcontroller:** CH32V203C8T6 (RISC-V)  
-**Framework:** Arduino on PlatformIO  
+**Version:** BMCU-C 370 Hall V0.1-0020
+**Microcontroller:** CH32V203C8T6 (RISC-V)
+**Framework:** Arduino on PlatformIO
 **License:** GPL 2.0 (Personal use and learning only)
 
 ## Key Features
@@ -71,7 +63,7 @@ BMCU-C is the latest generation of the BMCU (Bambu Multi-Color Unit) project, fe
 For developers:
 1. Set up your [Development Environment](developer-guide/development-setup.md)
 2. Read the [Architecture Overview](developer-guide/architecture.md)
-3. Explore the [Code Reference](developer-guide/code-reference.md)
+3. Study the [BambuBus Protocol](developer-guide/bambubus-protocol.md)
 
 ## Support and Community
 

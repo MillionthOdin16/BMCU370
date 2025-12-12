@@ -4,8 +4,8 @@
 
 This guide covers the complete assembly process for the BMCU-C 370 Hall version. Follow these steps carefully for best results.
 
-**Estimated Time:** 4-8 hours for first-time builders  
-**Skill Level:** Intermediate (requires soldering and mechanical assembly)  
+**Estimated Time:** 4-8 hours for first-time builders
+**Skill Level:** Intermediate (requires soldering and mechanical assembly)
 **Tools Required:** See Tools section below
 
 ---
@@ -14,10 +14,10 @@ This guide covers the complete assembly process for the BMCU-C 370 Hall version.
 
 ### Prerequisites
 
-✅ **All parts gathered** - See [BOM](bom.md) for complete list  
-✅ **PCBs received** - Mainboard and 4 sub-boards  
-✅ **3D printed parts** ready - All printed and cleaned  
-✅ **Tools prepared** - See list below  
+✅ **All parts gathered** - See [Bill of Materials](../hardware/bom.md) for complete list
+✅ **PCBs received** - Mainboard and 4 sub-boards
+✅ **3D printed parts** ready - All printed and cleaned
+✅ **Tools prepared** - See list below
 ✅ **Workspace set up** - Clean, well-lit, ESD-safe
 
 ### Assembly Strategy
@@ -491,7 +491,7 @@ DEBUG_float(MC_AS5600.raw_angle[0], 0);
 ### AS5600 Red LED (Magnet Not Detected)
 
 **Check:**
-1. Magnet installed? 
+1. Magnet installed?
 2. Magnet radial, not axial?
 3. Distance 1-2mm from sensor?
 4. AS5600 soldered correctly?
@@ -526,26 +526,26 @@ DEBUG_float(MC_AS5600.raw_angle[0], 0);
 
 ### During Assembly
 
-✓ Use ESD protection for electronics  
-✓ Don't exceed 350°C soldering temperature  
-✓ Wear safety glasses when cutting/trimming  
-✓ Work in ventilated area (solder fumes)  
+✓ Use ESD protection for electronics
+✓ Don't exceed 350°C soldering temperature
+✓ Wear safety glasses when cutting/trimming
+✓ Work in ventilated area (solder fumes)
 ✓ Keep workspace organized and clean
 
 ### Testing
 
-✓ Start with low power/PWM  
-✓ Don't force mechanical parts  
-✓ Monitor for overheating  
-✓ Have fire extinguisher nearby (electronics)  
+✓ Start with low power/PWM
+✓ Don't force mechanical parts
+✓ Monitor for overheating
+✓ Have fire extinguisher nearby (electronics)
 ✓ Disconnect power when making changes
 
 ### Operation
 
-✓ Don't exceed 100% print speed initially  
-✓ Monitor first few prints closely  
-✓ Keep filament path clear  
-✓ Regularly check for wear/loosening  
+✓ Don't exceed 100% print speed initially
+✓ Monitor first few prints closely
+✓ Keep filament path clear
+✓ Regularly check for wear/loosening
 ✓ Maintain dry box if using hygroscopic filaments
 
 ---
@@ -579,7 +579,7 @@ Before declaring complete:
 - First month: Weekly check for loose screws
 - Ongoing: Monthly gear inspection
 
-**See [Maintenance Guide](maintenance.md) for details**
+**See [Troubleshooting Guide](troubleshooting.md) for ongoing maintenance details**
 
 ---
 
@@ -603,8 +603,8 @@ Before declaring complete:
 
 ## Resources
 
-- **BOM:** [Bill of Materials](bom.md)
-- **Hardware Details:** [Hardware Overview](../user-guide/hardware-overview.md)
+- **Bill of Materials:** [Complete parts list](../hardware/bom.md)
+- **Hardware Details:** [Hardware Overview](hardware-overview.md)
 - **Firmware Setup:** [Development Setup](../developer-guide/development-setup.md)
 - **Community Wiki:** https://bmcu.wanzii.cn/doc/build/370hall.html
 
@@ -616,6 +616,6 @@ With patience and attention to detail, you should now have a fully functional fo
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2025-12-12  
+**Document Version:** 1.0
+**Last Updated:** 2025-12-12
 **Compatible with:** BMCU-C 370 Hall V0.1-0020

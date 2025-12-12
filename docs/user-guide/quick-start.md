@@ -151,7 +151,7 @@ This guide will help you get started with your BMCU-C 370 Hall Effect version fi
 - All channels return to standby (blue top LEDs)
 
 **If stuck at 99%:**
-- See [Troubleshooting - Stuck at 99%](troubleshooting.md#stuck-at-99)
+- See the [Troubleshooting Guide](troubleshooting.md) for solutions to the "stuck at 99%" issue
 
 ## LED Status Reference
 
@@ -235,13 +235,6 @@ This guide will help you get started with your BMCU-C 370 Hall Effect version fi
 - Re-calibrate buffer if behavior changes
 - Tighten any loose screws
 
-## Getting Help
-
-### Documentation Resources
-- [Hardware Overview](hardware-overview.md) - Detailed component information
-- [Troubleshooting Guide](troubleshooting.md) - Common issues and solutions
-- [Maintenance Guide](maintenance.md) - Detailed maintenance procedures
-
 ### Community Resources
 - **English Wiki:** https://wiki.yuekai.fr/en/BMCU
 - **Chinese Wiki:** https://bmcu.wanzii.cn/
@@ -297,7 +290,6 @@ Now that you have BMCU-C running:
 For advanced users, explore:
 - [Developer Guide](../developer-guide/architecture.md) - System architecture
 - [BambuBus Protocol](../developer-guide/bambubus-protocol.md) - Communication details
-- [Code Reference](../developer-guide/code-reference.md) - Firmware functions
 
 ---
 

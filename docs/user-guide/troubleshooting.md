@@ -729,10 +729,10 @@ When asking for help, include:
 
 ### Before Creating Issue
 
-✓ Search existing issues first  
-✓ Read troubleshooting guide  
-✓ Try basic solutions  
-✓ Gather diagnostic information  
+✓ Search existing issues first
+✓ Read troubleshooting guide
+✓ Try basic solutions
+✓ Gather diagnostic information
 ✓ Prepare clear description with photos/videos if helpful
 
 ## Prevention and Maintenance
@@ -757,13 +757,13 @@ When asking for help, include:
 
 ### Best Practices
 
-✅ Keep BMCU in clean, dust-free environment  
-✅ Use quality filament with consistent diameter  
-✅ Don't exceed 100% print speed initially  
-✅ Monitor buffer pressure during prints  
-✅ Keep firmware updated  
-✅ Maintain good cable management  
-✅ Document any modifications made  
+✅ Keep BMCU in clean, dust-free environment
+✅ Use quality filament with consistent diameter
+✅ Don't exceed 100% print speed initially
+✅ Monitor buffer pressure during prints
+✅ Keep firmware updated
+✅ Maintain good cable management
+✅ Document any modifications made
 
 ---
 
