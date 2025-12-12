@@ -13,7 +13,7 @@ This report documents bugs, potential bugs, and valuable features identified thr
 ## 🔴 CRITICAL PRIORITY - Security & Safety Bugs
 
 ### 1. Buffer Overflow - Array Index Bounds Checking (CRITICAL)
-**Status:** ❌ Bug exists in current codebase  
+**Status:** BUG EXISTS in current codebase  
 **Location:** `src/BambuBus.cpp`  
 **Issue:** Multiple functions do not validate array indices for negative values before accessing arrays, allowing potential buffer underflows.
 
@@ -23,7 +23,7 @@ This report documents bugs, potential bugs, and valuable features identified thr
 - `get_filament_meters(int num)` - Only checks `num < 4`, not `num >= 0`
 - `set_filament_online(int num, bool if_online)` - Only checks `num < 4`, not `num >= 0`
 
-**Fix Applied in:** `BMCU370t` branch `jules/fix-usb-cdc-implementation` commit `f361e2d`
+**Fix Applied in:** `BMCU370t` branch `jules/fix-usb-cdc-implementation` commit `f361e2df7e`
 
 **Impact:** High - Could cause crashes, undefined behavior, or memory corruption if negative indices are passed.
 
@@ -32,7 +32,7 @@ This report documents bugs, potential bugs, and valuable features identified thr
 ---
 
 ### 2. Race Conditions in Motion Control (HIGH)
-**Status:** ⚠️ Potential vulnerability  
+**Status:** POTENTIAL VULNERABILITY  
 **Location:** `src/Motion_control.cpp`  
 **Issue:** ADC data reading and assignment not atomic, creating race condition potential.
 
@@ -47,7 +47,7 @@ void MC_PULL_ONLINE_read()
 }
 ```
 
-**Fix Applied in:** `BMCU370t` branch `jules/fix-usb-cdc-implementation` commit `61e679d`
+**Fix Applied in:** `BMCU370t` branch `jules/fix-usb-cdc-implementation` commit `61e679df9c`
 
 **Impact:** Medium-High - Could cause intermittent sensor reading errors, incorrect motor control decisions.
 
@@ -59,11 +59,11 @@ void MC_PULL_ONLINE_read()
 ---
 
 ### 3. Negative Meter Value Validation (MEDIUM)
-**Status:** ⚠️ Missing validation  
+**Status:** MISSING VALIDATION  
 **Location:** `src/BambuBus.cpp` - `add_filament_meters()`  
 **Issue:** No validation that `meters` parameter is non-negative.
 
-**Fix Applied in:** `BMCU370t` commit `f361e2d`
+**Fix Applied in:** `BMCU370t` commit `f361e2df7e`
 
 **Impact:** Medium - Could cause incorrect filament usage tracking if negative values passed.
 
@@ -74,7 +74,7 @@ void MC_PULL_ONLINE_read()
 ## 🟡 HIGH PRIORITY - Functional Bugs
 
 ### 4. P1X Printer Speed and Timing Issues (HIGH)
-**Status:** ⚠️ May affect P1X printer compatibility  
+**Status:** MAY AFFECT P1X COMPATIBILITY  
 **Location:** `src/Motion_control.cpp`  
 **Issue:** Motor speeds and timing values not optimized for P1X printers, causing feeding issues.
 
@@ -85,7 +85,7 @@ void MC_PULL_ONLINE_read()
 - P1X OUT_TIME disabled (commented out, should be 3500ms not 4000ms)
 - A1X OUT_TIME too long (2600ms → should be 2000ms)
 
-**Fix Applied in:** `BMCU370x` commit `b7b380c`
+**Fix Applied in:** `BMCU370x` commit `b7b380cadd`
 
 **Impact:** High for P1X users - Improper filament feeding, potential jamming, failed prints.
 
@@ -103,11 +103,11 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ```
 
 ### 5. P1X Gentle Mode Logic Issue (MEDIUM-HIGH)
-**Status:** ⚠️ Incorrect behavior for P1X printers  
+**Status:** INCORRECT BEHAVIOR for P1X printers  
 **Location:** `src/Motion_control.cpp` - `motor_motion_switch()`  
 **Issue:** Gentle mode logic should apply to both A1 and P1X series, but current code only applies to A1.
 
-**Fix Applied in:** `BMCU370x` commit `b7b380c`
+**Fix Applied in:** `BMCU370x` commit `b7b380cadd`
 
 **Impact:** Medium-High - P1X printers don't get proper slow-start feeding, risking filament feeding failures.
 
@@ -118,32 +118,32 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ## 🟢 MEDIUM PRIORITY - Quality of Life & Reliability
 
 ### 6. Saved Color Loading on Boot (MEDIUM)
-**Status:** ✅ Already fixed in current repository  
+**Status:** ALREADY FIXED in current repository  
 **Location:** `src/BambuBus.cpp` - `BambuBus_init()`  
 **Issue:** Boot-time color loading was present and working.
 
-**Fix Applied in:** `BMCU370t` `autoloading` branch commit `869f3c5`  
+**Fix Applied in:** `BMCU370t` `autoloading` branch commit `869f3c519c`  
 **Current Status:** Code review confirms fix is already present in main repository.
 
 ---
 
 ### 7. Multi-channel Timing and Index Issues (MEDIUM)
-**Status:** ⚠️ Needs investigation  
+**Status:** NEEDS INVESTIGATION  
 **Location:** Multiple files in motion control  
-**Issue:** Timing synchronization bugs between channels and potential index mismatches.
+**Issue:** Timing synchronization bugs between channels causing coordination problems when multiple channels operate simultaneously. Symptoms include channels not switching at correct times and index mismatches between channel state arrays.
 
-**Fix Applied in:** `BMCU370t` commit `e2f38aa`
+**Fix Applied in:** `BMCU370t` commit `e2f38aa96f`
 
 **Impact:** Medium - Could cause coordination issues when multiple channels are active.
 
-**Recommended Action:** Review commit `e2f38aa` for specific timing adjustments and apply if reproducible issues exist.
+**Recommended Action:** Review commit `e2f38aa96f` for specific timing adjustments and apply if reproducible issues exist.
 
 ---
 
 ## 📦 HIGH-VALUE FEATURES (Implementation Candidates)
 
 ### Feature 1: USB CDC Communication Interface (HIGH VALUE) ⭐⭐⭐⭐⭐
-**Status:** 🆕 Not present in current repository  
+**Status:** NOT PRESENT in current repository  
 **Branches:** 
 - `BMCU370t/usb-ESP` - Initial USB files
 - `BMCU370t/feature/bmcu-interface-improvements` - Full USB implementation
@@ -164,16 +164,16 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 5. Enables advanced debugging and diagnostics
 
 **Implementation Complexity:** Medium-High  
-**Dependencies:** May require TinyUSB library or Arduino USB CDC support  
-**Risk:** Medium - Build environment challenges noted in TinyUSB implementation
+**Dependencies:** Requires TinyUSB library or Arduino USB CDC support (TinyUSB library: Adafruit_TinyUSB version 1.7.0+)  
+**Risk:** Medium - Build environment setup required; TinyUSB implementation had library dependency finder issues in sandbox environment
 
-**Recommendation:** ⭐ HIGH PRIORITY - Significant value for debugging and expanded functionality. Start with simpler implementation from `usb-ESP` branch before attempting TinyUSB version.
+**Recommendation:** HIGH PRIORITY - Significant value for debugging and expanded functionality. Start with simpler implementation from `usb-ESP` branch before attempting TinyUSB version.
 
 ---
 
 ### Feature 2: Comprehensive Debug Monitoring System (HIGH VALUE) ⭐⭐⭐⭐
-**Status:** 🆕 Not present in current repository  
-**Branch:** `BMCU370t/copilot/fix-62` commit `bce9a67`
+**Status:** NOT PRESENT in current repository  
+**Branch:** `BMCU370t/copilot/fix-62` commit `bce9a67d97`
 
 **Description:** USB serial output-based debug monitoring system for real-time diagnostics.
 
@@ -193,8 +193,8 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ---
 
 ### Feature 3: Persistent Filament Data Across Firmware Updates (MEDIUM-HIGH VALUE) ⭐⭐⭐
-**Status:** 🆕 Not present in current repository  
-**Branch:** `BMCU370t/copilot/fix-62` commits `5415842`, `94120b8`
+**Status:** NOT PRESENT in current repository  
+**Branch:** `BMCU370t/copilot/fix-62` commits `5415842d05`, `94120b8f22`
 
 **Description:** Store filament color and usage data in protected flash regions that survive firmware updates.
 
@@ -213,10 +213,10 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ---
 
 ### Feature 4: Adaptive Pressure Control for Problematic Filaments (MEDIUM VALUE) ⭐⭐⭐
-**Status:** 🆕 Not present in current repository  
+**Status:** NOT PRESENT in current repository - EXPERIMENTAL  
 **Branches:** 
-- `BMCU370t` commit `e5beb3a` - Adaptive pressure control
-- `BMCU370t` commit `4b6a00b` - Magenta-triggered gentle mode
+- `BMCU370t` commit `e5beb3aef3` - Adaptive pressure control
+- `BMCU370t` commit `4b6a00ba1d` - Magenta-triggered gentle mode
 
 **Description:** Automatic pressure adjustment based on filament characteristics, with optional color-triggered gentle mode for low-quality filaments.
 
@@ -228,15 +228,15 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 
 **Implementation Complexity:** Medium  
 **Dependencies:** None - works with existing sensor and motor systems  
-**Risk:** Low-Medium - Needs thorough testing to avoid over/under-extrusion
+**Risk:** Medium - Branch history includes revert commit `4f98421a6b` "Revert flawed adaptive pressure - keep only validated fixes", indicating stability concerns
 
-**Recommendation:** ⭐ MEDIUM PRIORITY - Nice enhancement for filament compatibility, but verify stability (note: branch includes "revert flawed adaptive pressure" commit `4f98421`, suggesting implementation challenges).
+**Recommendation:** MEDIUM PRIORITY - Potentially valuable feature but requires thorough validation. The revert commit suggests the implementation had issues. Review both the implementation and the revert to understand what worked and what didn't before attempting implementation.
 
 ---
 
 ### Feature 5: Enhanced Robustness and Accuracy Improvements (MEDIUM VALUE) ⭐⭐⭐
-**Status:** 🆕 Partially applicable  
-**Branch:** `BMCU370t/copilot/fix-b992db6c-d398-4ebf-8d2c-38da82d3e455` commit `63c81ad`
+**Status:** NOT PRESENT - Partially applicable  
+**Branch:** `BMCU370t/copilot/fix-b992db6c-d398-4ebf-8d2c-38da82d3e455` commit `63c81ad992`
 
 **Description:** Comprehensive improvements across multiple subsystems:
 - Enhanced ADC_DMA filtering and accuracy (+267 lines)
@@ -261,21 +261,21 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ## 🔵 LOWER PRIORITY / ESP32-SPECIFIC FEATURES
 
 ### ESP32 Web Interface and WiFi Management (LOW PRIORITY for BMCU) ⭐
-**Status:** 🆕 ESP32-specific, not applicable to core BMCU  
+**Status:** NOT APPLICABLE to core BMCU  
 **Branches:** Multiple in `feature/bmcu-interface-improvements`
 
 **Description:** Complete web-based interface for ESP32, including WiFi configuration, OTA updates, LittleFS filesystem.
 
-**Recommendation:** ⏸️ LOW PRIORITY - Only relevant if ESP32 integration is planned. Core BMCU firmware doesn't need this.
+**Recommendation:** LOW PRIORITY - Only relevant if ESP32 integration is planned. Core BMCU firmware doesn't need this.
 
 ---
 
 ## 📊 IMPLEMENTATION ROADMAP
 
 ### Phase 1: Critical Security Fixes (IMMEDIATE)
-1. ✅ Fix buffer overflow - array bounds checking (1-2 hours)
-2. ✅ Add race condition protection in Motion_control (2-3 hours)
-3. ✅ Add negative value validation (30 minutes)
+1. [ ] Fix buffer overflow - array bounds checking (1-2 hours)
+2. [ ] Add race condition protection in Motion_control (2-3 hours)
+3. [ ] Add negative value validation (30 minutes)
 
 **Estimated Time:** 1 day  
 **Risk:** Low  
@@ -284,10 +284,10 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ---
 
 ### Phase 2: P1X Compatibility Fixes (HIGH PRIORITY)
-1. ✅ Adjust motor speeds for P1X (1 hour)
-2. ✅ Fix timing values (A1X, P1X OUT_TIME) (1 hour)
-3. ✅ Enable/fix gentle mode for P1X (2 hours)
-4. ✅ Test with P1X printer hardware
+1. [ ] Adjust motor speeds for P1X (1 hour)
+2. [ ] Fix timing values (A1X, P1X OUT_TIME) (1 hour)
+3. [ ] Enable/fix gentle mode for P1X (2 hours)
+4. [ ] Test with P1X printer hardware
 
 **Estimated Time:** 2-3 days (including testing)  
 **Risk:** Medium - Requires hardware testing  
@@ -296,12 +296,12 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ---
 
 ### Phase 3: USB CDC Communication (HIGH VALUE)
-1. ✅ Integrate initial USB files from usb-ESP branch
-2. ✅ Implement basic USB CDC device layer
-3. ✅ Add USB protocol handling
-4. ✅ Add USB status API
-5. ✅ Test USB communication
-6. ✅ Document USB protocol
+1. [ ] Integrate initial USB files from usb-ESP branch
+2. [ ] Implement basic USB CDC device layer
+3. [ ] Add USB protocol handling
+4. [ ] Add USB status API
+5. [ ] Test USB communication
+6. [ ] Document USB protocol
 
 **Estimated Time:** 1-2 weeks  
 **Risk:** Medium  
@@ -310,12 +310,12 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ---
 
 ### Phase 4: Debug Monitoring System (HIGH VALUE)
-1. ✅ Design debug output format
-2. ✅ Implement debug logging infrastructure
-3. ✅ Add sensor monitoring outputs
-4. ✅ Add motor state monitoring
-5. ✅ Add channel status monitoring
-6. ✅ Test and optimize output rate
+1. [ ] Design debug output format
+2. [ ] Implement debug logging infrastructure
+3. [ ] Add sensor monitoring outputs
+4. [ ] Add motor state monitoring
+5. [ ] Add channel status monitoring
+6. [ ] Test and optimize output rate
 
 **Estimated Time:** 3-5 days  
 **Risk:** Low  
@@ -324,9 +324,9 @@ OUT_TIME = P1X_OUT_TIME;       // Uncomment for P1X
 ---
 
 ### Phase 5: Advanced Features (MEDIUM PRIORITY)
-1. ⏳ Persistent filament data (1 week)
-2. ⏳ Adaptive pressure control (1 week, needs validation)
-3. ⏳ Cherry-pick robustness improvements (ongoing)
+1. [ ] Persistent filament data (1 week)
+2. [ ] Adaptive pressure control - evaluate carefully (1 week, needs validation)
+3. [ ] Cherry-pick robustness improvements (ongoing)
 
 **Estimated Time:** 2-3 weeks  
 **Risk:** Medium  
@@ -425,20 +425,20 @@ The analysis reveals several **critical security vulnerabilities** that should b
 ## 📚 REFERENCE COMMITS
 
 ### Critical Bug Fixes:
-- Buffer overflow: `BMCU370t@f361e2d`
-- Race conditions: `BMCU370t@61e679d`
-- P1X fixes: `BMCU370x@b7b380c`
+- Buffer overflow: `BMCU370t@f361e2df7e`
+- Race conditions: `BMCU370t@61e679df9c`
+- P1X fixes: `BMCU370x@b7b380cadd`
 
 ### Key Features:
-- USB CDC (basic): `BMCU370t@43957d4` (usb-ESP branch)
-- USB CDC (advanced): `BMCU370t@01f5911` (jules branch)
-- Debug monitoring: `BMCU370t@bce9a67`
-- Persistent data: `BMCU370t@5415842`
-- Adaptive pressure: `BMCU370t@e5beb3a`
+- USB CDC (basic): `BMCU370t@43957d4edf` (usb-ESP branch)
+- USB CDC (advanced): `BMCU370t@01f591195e` (jules branch)
+- Debug monitoring: `BMCU370t@bce9a67d97`
+- Persistent data: `BMCU370t@5415842d05`
+- Adaptive pressure: `BMCU370t@e5beb3aef3`
 
 ### Comprehensive Improvements:
-- Robustness suite: `BMCU370t@63c81ad`
-- Multi-channel timing: `BMCU370t@e2f38aa`
+- Robustness suite: `BMCU370t@63c81ad992`
+- Multi-channel timing: `BMCU370t@e2f38aa96f`
 
 ---
 
