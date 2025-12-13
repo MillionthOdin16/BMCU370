@@ -715,14 +715,18 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
         }
         else if ((read_num == 0xFF) && (statu_flags == 0x01))
         {
-            AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
-            if (motion != AMS_filament_motion::on_use)
+            // Bug #1 Fix: Check bounds before accessing filament array
+            if ((unsigned)data_save.BambuBus_now_filament_num < 4)
             {
-                for (int i = 0; i < 4; i++)
+                AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
+                if (motion != AMS_filament_motion::on_use)
                 {
-                    data_save.filament[i].motion_set = AMS_filament_motion::idle;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        data_save.filament[i].motion_set = AMS_filament_motion::idle;
+                    }
+                    data_save.filament_use_flag = 0x00;
                 }
-                data_save.filament_use_flag = 0x00;
             }
         }
     }
