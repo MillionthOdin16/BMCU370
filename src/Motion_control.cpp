@@ -405,7 +405,7 @@ public:
                         if (MC_PULL_stu_raw[CHx] < PULL_VOLTAGE_SEND_MAX) // 压力主动到这个位置
                             speed_set = 30;
                         else
-                            speed_set = 0; // 原版这里是 10
+                            speed_set = 10; // 原版这里是 10
                     }
                     else
                     {
@@ -600,8 +600,12 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 pull_state_old = false; // 重置标记
                 is_backing_out = true; // 标记正在回退
                 filament_now_position[num] = filament_pulling_back;
-                // Note: Distance-based retraction control only for regular AMS (P/X-series)
-                // AMS Lite (A1/A1 mini) lets the printer control when to stop via BambuBus
+                if (device_type == BambuBus_AMS_lite)
+                {
+                    MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_pull, 100);
+                }
+                // Note: AMS Lite starts motor here, printer controls when to stop via BambuBus
+                // Regular AMS uses distance-based stopping in motor_motion_run()
                 break;
             case AMS_filament_motion::before_pull_back:
             case AMS_filament_motion::on_use:
