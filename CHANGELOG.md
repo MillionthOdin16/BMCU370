@@ -6,6 +6,37 @@ This changelog documents the development history of the BMCU-C 370 Hall version 
 
 ---
 
+## [V0.1-0022] - 2025-12-13 (Evening Update)
+
+### Fixed - A1 Mini Retraction Critical Bugs
+- **Bug #32 - CRITICAL: A1 Mini Filament Retraction Failure**
+  - **Problem:** A1 Mini failed to retract filament after printing with error "Failed to pull out filament from toolhead [1200-8015]"
+  - **Root Cause:** Motor start command for AMS Lite was accidentally removed during refactoring
+  - **Fix:** Restored `MOTOR_CONTROL[num].set_motion()` call for AMS Lite in `need_pull_back` case
+  - **Impact:** A1 Mini retraction now works correctly - motor starts on command, printer controls when to stop via BambuBus
+  - **Files:** `src/Motion_control.cpp` lines 603-609
+  - **Commits:** 86e90d1, 1b182f9, e2f7cd9
+
+- **Bug #33 - MEDIUM: Jerky Filament Feeding**
+  - **Problem:** Filament feeding stuttered or stalled when encountering resistance
+  - **Root Cause:** Motor speed set to 0 (full stop) instead of 10 mm/s when pressure reached 1.7V
+  - **Fix:** Changed `speed_set = 0` to `speed_set = 10` to match working BMCU370t firmware
+  - **Impact:** Smooth feeding with 30→10 mm/s transition instead of jerky 30→0→30 cycling
+  - **Files:** `src/Motion_control.cpp` line 408
+  - **Commit:** e2f7cd9
+
+### Improved
+- **Control Architecture Clarification:** Documented that A1 Mini printer controls WHEN retraction stops (via BambuBus), while BMCU controls motor starting
+- **Code Comments:** Added detailed comments explaining AMS Lite vs regular AMS retraction control differences
+
+### Verified
+- ✅ All parameters now match working BMCU370t firmware
+- ✅ A1 Mini filament loading and unloading tested successfully
+- ✅ Smooth feeding under resistance verified
+- ✅ No complete filament unload from AMS
+
+---
+
 ## [Unreleased]
 
 ### Fixed
