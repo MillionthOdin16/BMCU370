@@ -4,7 +4,7 @@
 **Source:** REPOSITORY_ANALYSIS_REPORT.md  
 **Methodology:** Systematic code review of all bugs/issues listed in the analysis report to identify which ones actually exist in the current BMCU370 codebase.
 
-**Summary:** Out of 31 bugs identified in the analysis report, **13 bugs have been definitively confirmed to exist** in the current codebase, with 19 additional bugs requiring further investigation. These are documented below with specific file locations, line numbers, and code evidence.
+**Summary:** Out of 31 bugs identified in the analysis report, **11 bugs have been definitively confirmed to exist** in the current codebase, with 19 additional bugs requiring further investigation. These are documented below with specific file locations, line numbers, and code evidence.
 
 ---
 
@@ -83,7 +83,7 @@ Multiple functions only check upper bound (`num < 4`) but not lower bound (`num 
    }
    ```
 
-7. **`send_for_long_packge_filament()` - Line 1041-1060 - MOST CRITICAL**
+7. **`send_for_long_package_filament()` - Line 1041-1060 - MOST CRITICAL**
    ```cpp
    uint8_t filament_num = printer_data_long.datas[1];  // ❌ External input, NO validation!
    if (AMS_num != BambuBus_AMS_num)
@@ -98,7 +98,7 @@ Multiple functions only check upper bound (`num < 4`) but not lower bound (`num 
 
 **Impact:** 
 - Negative indices can cause buffer underflow and memory corruption
-- `send_for_long_packge_filament()` especially critical as `filament_num` comes from external printer data
+- `send_for_long_package_filament()` especially critical as `filament_num` comes from external printer data
 - Could cause crashes, undefined behavior, or memory corruption
 
 **Required Fix:** Add `num >= 0 && num < 4` checks (or `(unsigned)num < 4`) to all functions
@@ -172,7 +172,7 @@ void add_filament_meters(int num, float meters)
 
 **Evidence:**
 
-1. **`send_for_set_filament()` - Line 1147-1163**
+1. **`send_for_set_filament()` - Line 1145-1163**
    ```cpp
    void send_for_set_filament(unsigned char *buf, int length)
    {
