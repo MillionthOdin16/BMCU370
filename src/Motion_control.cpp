@@ -600,10 +600,6 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 pull_state_old = false; // 重置标记
                 is_backing_out = true; // 标记正在回退
                 filament_now_position[num] = filament_pulling_back;
-                if (device_type == BambuBus_AMS_lite)
-                {
-                    MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_pull, 100);
-                }
                 // Prepare_For_filament_Pull_Back(OUT_filament_meters); // 通过距离控制退料是否完成
                 break;
             case AMS_filament_motion::before_pull_back:
@@ -677,7 +673,10 @@ void motor_motion_run(int error)
         // 根据设备类型执行不同的电机控制逻辑
         if (device_type == BambuBus_AMS_lite)
         {
-            motor_motion_switch(); // 调度电机
+            if (!Prepare_For_filament_Pull_Back(P1X_OUT_filament_meters)) // 取反(返回true)，则代表不需要优先考虑退料，并继续调度电机。
+            {
+                motor_motion_switch(); // 调度电机
+            }
         }
         else if (device_type == BambuBus_AMS)
         {
