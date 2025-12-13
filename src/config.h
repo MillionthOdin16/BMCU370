@@ -77,9 +77,8 @@
 #define RGB_UPDATE_INTERVAL_MS  3000        ///< RGB update interval for error states
 
 // Filament distances (in millimeters)
-#define P1X_OUT_FILAMENT_MM     200.0f      ///< AMS (P1X) internal filament retraction distance
-#define P1X_OUT_FILAMENT_EXT_MM 700.0f      ///< AMS (P1X) external filament retraction distance
-#define AMS_LITE_OUT_FILAMENT_MM 200.0f     ///< AMS Lite (A1 mini) filament retraction distance
+#define P1X_OUT_FILAMENT_MM     200.0f      ///< Internal filament retraction distance
+#define P1X_OUT_FILAMENT_EXT_MM 700.0f      ///< External filament retraction distance
 
 // Speed filtering constant
 #define SPEED_FILTER_K          100         ///< Speed calculation filter coefficient
