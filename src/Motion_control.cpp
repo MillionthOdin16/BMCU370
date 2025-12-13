@@ -57,7 +57,7 @@ void MC_PULL_ONLINE_read()
     // Use local copies for atomic-like updates
     float temp_pull[4];
     float temp_online[4];
-    
+
     temp_pull[3] = data[0];
     temp_online[3] = data[1];
     temp_pull[2] = data[2];
@@ -66,7 +66,7 @@ void MC_PULL_ONLINE_read()
     temp_online[1] = data[5];
     temp_pull[0] = data[6];
     temp_online[0] = data[7];
-    
+
     // Update globals in one operation
     for (int i = 0; i < 4; i++)
     {
@@ -545,6 +545,8 @@ bool wait = false;
 bool Prepare_For_filament_Pull_Back(float_t OUT_filament_meters)
 {
     bool wait = false;
+    static uint64_t last_rgb_update_time = 0; // Rate limiting for RGB updates
+
     for (int i = 0; i < 4; i++)
     {
         if (filament_now_position[i] == filament_pulling_back)
@@ -555,9 +557,16 @@ bool Prepare_For_filament_Pull_Back(float_t OUT_filament_meters)
             {
                 // 未到达时进行退料
                 MOTOR_CONTROL[i].set_motion(filament_motion_enum::filament_motion_pull, 100); // 驱动电机退料
+
                 // 渐变灯效
-                float npercent = (last_total_distance[i] / OUT_filament_meters) * 100.0f;
-                MC_STU_RGB_set(i, 255 - ((255 / 100) * npercent), 125 - ((125 / 100) * npercent), (255 / 100) * npercent);
+                // Rate limit LED updates to prevent UART interrupt starvation
+                uint64_t now = get_time64();
+                if (now - last_rgb_update_time > 50) // Update max every 50ms
+                {
+                    float npercent = (last_total_distance[i] / OUT_filament_meters) * 100.0f;
+                    MC_STU_RGB_set(i, 255 - ((255 / 100) * npercent), 125 - ((125 / 100) * npercent), (255 / 100) * npercent);
+                    last_rgb_update_time = now;
+                }
                 // 退料未完成需要优先处理
             }
             else
@@ -600,7 +609,8 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 pull_state_old = false; // 重置标记
                 is_backing_out = true; // 标记正在回退
                 filament_now_position[num] = filament_pulling_back;
-                // Prepare_For_filament_Pull_Back(OUT_filament_meters); // 通过距离控制退料是否完成
+                // AMS Lite logic is now handled in motor_motion_run via Prepare_For_filament_Pull_Back
+                // Removed explicit set_motion here to allow distance check to work
                 break;
             case AMS_filament_motion::before_pull_back:
             case AMS_filament_motion::on_use:
@@ -673,7 +683,8 @@ void motor_motion_run(int error)
         // 根据设备类型执行不同的电机控制逻辑
         if (device_type == BambuBus_AMS_lite)
         {
-            if (!Prepare_For_filament_Pull_Back(P1X_OUT_filament_meters)) // 取反(返回true)，则代表不需要优先考虑退料，并继续调度电机。
+            // Bug #32 Fix: Enable retraction logic for AMS Lite
+            if (!Prepare_For_filament_Pull_Back(P1X_OUT_filament_meters))
             {
                 motor_motion_switch(); // 调度电机
             }
@@ -1044,7 +1055,7 @@ void Motion_control_init() // 初始化所有运动和传感器
     MC_PULL_ONLINE_init();
     MC_PULL_ONLINE_read();
     MOTOR_init();
-    
+
     /*
     //这是一段阻塞的DEBUG代码
     while (1)
