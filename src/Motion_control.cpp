@@ -599,6 +599,7 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
             case AMS_filament_motion::need_pull_back:
                 pull_state_old = false; // 重置标记
                 is_backing_out = true; // 标记正在回退
+                last_total_distance[num] = 0; // 重置退料距离计数器
                 filament_now_position[num] = filament_pulling_back;
                 if (device_type == BambuBus_AMS_lite)
                 {
@@ -620,7 +621,7 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 }
                 else if (filament_now_position[num] == filament_using) // 已经触发且处于使用中
                 {
-                    last_total_distance[i] = 0; // 重置退料距离
+                    last_total_distance[num] = 0; // 重置退料距离
                     if (time_now > time_end)
                     {                                          // 已超1.5秒，进入通道使用 进行续料
                         MC_STU_RGB_set(num, 255, 255, 255); // 白色
@@ -1076,5 +1077,6 @@ void Motion_control_init() // 初始化所有运动和传感器
         //     filament_channel_inserted[i]=false;
         // }
         filament_now_position[i] = filament_idle;//将通道初始状态设置为空闲
+        last_total_distance[i] = 0.0f; // 重置退料距离计数器
     }
 }
