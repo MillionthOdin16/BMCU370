@@ -599,7 +599,7 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 pull_state_old = false; // 重置标记
                 is_backing_out = true; // 标记正在回退
                 filament_now_position[num] = filament_pulling_back;
-                // Distance-based retraction is now handled in motor_motion_run() for both AMS and AMS Lite
+                // Distance-based retraction via Prepare_For_filament_Pull_Back() is called in motor_motion_run() for both AMS and AMS Lite
                 break;
             case AMS_filament_motion::before_pull_back:
             case AMS_filament_motion::on_use:
