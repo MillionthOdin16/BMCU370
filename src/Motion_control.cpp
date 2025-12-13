@@ -600,11 +600,9 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 pull_state_old = false; // 重置标记
                 is_backing_out = true; // 标记正在回退
                 filament_now_position[num] = filament_pulling_back;
-                if (device_type == BambuBus_AMS_lite)
-                {
-                    MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_pull, 100);
-                }
-                // Prepare_For_filament_Pull_Back(OUT_filament_meters); // 通过距离控制退料是否完成
+                // Note: Distance-based retraction control is now handled in motor_motion_run()
+                // for both AMS and AMS Lite via Prepare_For_filament_Pull_Back()
+                // This prevents over-retraction that was causing filament to completely unload
                 break;
             case AMS_filament_motion::before_pull_back:
             case AMS_filament_motion::on_use:
@@ -682,9 +680,15 @@ void motor_motion_run(int error)
     if (!error) // 正常模式
     {
         // 根据设备类型执行不同的电机控制逻辑
+        // Bug Fix: Both AMS and AMS Lite now use distance-based retraction control
+        // to prevent over-retraction that pulls filament completely out of the AMS
         if (device_type == BambuBus_AMS_lite)
         {
-            motor_motion_switch(); // 调度电机
+            // AMS Lite: Use same distance control as regular AMS to prevent infinite retraction
+            if (!Prepare_For_filament_Pull_Back(P1X_OUT_filament_meters))
+            {
+                motor_motion_switch(); // 调度电机
+            }
         }
         else if (device_type == BambuBus_AMS)
         {

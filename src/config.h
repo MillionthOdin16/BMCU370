@@ -77,8 +77,9 @@
 #define RGB_UPDATE_INTERVAL_MS  3000        ///< RGB update interval for error states
 
 // Filament distances (in millimeters)
-#define P1X_OUT_FILAMENT_MM     200.0f      ///< Internal filament retraction distance
-#define P1X_OUT_FILAMENT_EXT_MM 700.0f      ///< External filament retraction distance
+// Retraction distance for pulling filament out of toolhead only (not full unload)
+#define P1X_OUT_FILAMENT_MM     80.0f       ///< Toolhead clearance retraction distance (reduced from 200mm)
+#define P1X_OUT_FILAMENT_EXT_MM 700.0f      ///< Full unload retraction distance (for complete filament removal)
 
 // Speed filtering constant
 #define SPEED_FILTER_K          100         ///< Speed calculation filter coefficient
