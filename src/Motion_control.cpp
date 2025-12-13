@@ -405,7 +405,7 @@ public:
                         if (MC_PULL_stu_raw[CHx] < PULL_VOLTAGE_SEND_MAX) // 压力主动到这个位置
                             speed_set = 30;
                         else
-                            speed_set = 0; // 原版这里是 10
+                            speed_set = 10; // 原版这里是 10
                     }
                     else
                     {
@@ -1086,3 +1086,4 @@ void Motion_control_init() // 初始化所有运动和传感器
         filament_now_position[i] = filament_idle;//将通道初始状态设置为空闲
     }
 }
+
