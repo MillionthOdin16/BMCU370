@@ -579,7 +579,6 @@ bool Prepare_For_filament_Pull_Back(float_t OUT_filament_meters)
 void motor_motion_switch() // 通道状态切换函数，只控制当前在使用的通道，其他通道设置为停止
 {
     int num = get_now_filament_num();                      // 当前通道号
-    uint16_t device_type = get_now_BambuBus_device_type(); // 设备类型
     for (int i = 0; i < 4; i++)
     {
         if (i != num)
@@ -600,11 +599,7 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 pull_state_old = false; // 重置标记
                 is_backing_out = true; // 标记正在回退
                 filament_now_position[num] = filament_pulling_back;
-                if (device_type == BambuBus_AMS_lite)
-                {
-                    MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_pull, 100);
-                }
-                // Prepare_For_filament_Pull_Back(OUT_filament_meters); // 通过距离控制退料是否完成
+                // Distance-based retraction is now handled in motor_motion_run() for both AMS and AMS Lite
                 break;
             case AMS_filament_motion::before_pull_back:
             case AMS_filament_motion::on_use:
@@ -677,7 +672,12 @@ void motor_motion_run(int error)
         // 根据设备类型执行不同的电机控制逻辑
         if (device_type == BambuBus_AMS_lite)
         {
-            motor_motion_switch(); // 调度电机
+            // Use distance-based retraction for AMS Lite to prevent over-retraction
+            const float_t AMS_LITE_OUT_filament_meters = AMS_LITE_OUT_FILAMENT_MM;
+            if (!Prepare_For_filament_Pull_Back(AMS_LITE_OUT_filament_meters))
+            {
+                motor_motion_switch(); // 调度电机
+            }
         }
         else if (device_type == BambuBus_AMS)
         {
