@@ -23,6 +23,11 @@
 #define BRIGHTNESS_MAIN_BOARD   35   ///< Main board LED brightness
 #define BRIGHTNESS_CHANNEL      15   ///< Channel LED brightness
 
+// RGB LED Color Accuracy
+// All RGB color values are gamma-corrected using Adafruit_NeoPixel::gamma8()
+// with gamma=2.6 to ensure accurate color representation and perceptually
+// linear brightness. This corrects for the non-linear response of WS2812B LEDs.
+
 // System Clock Configuration
 #define SYSTEM_CLOCK_HZ         144000000UL  ///< System clock frequency in Hz
 

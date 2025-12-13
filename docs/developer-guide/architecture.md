@@ -332,6 +332,7 @@ LED_PD1_NUM = 1   // System status
 - **Timing:** 800 kHz
 - **Control:** Bit-banged PWM
 - **Brightness:** Software-controlled (0-255)
+- **Gamma Correction:** Applied for accurate color representation (gamma=2.6)
 
 **Brightness Settings:**
 ```cpp
@@ -340,12 +341,19 @@ Channels:  15/255 (~6%)
 ```
 *Note: Reduced to prevent overheating and power consumption*
 
+**Color Accuracy:**
+All RGB values are gamma-corrected using `Adafruit_NeoPixel::gamma8()` before being sent to the LEDs. This ensures:
+- More accurate color representation
+- Better match between intended and displayed colors
+- Perceptually linear brightness transitions
+- Correction for non-linear LED response to PWM
+
 **LED Functions:**
 - `RGB_init()` - Initialize all LED strips
 - `RGB_Set_Brightness()` - Set brightness levels
 - `RGB_show_data()` - Update all LEDs
-- `Set_MC_RGB(channel, num, R, G, B)` - Set channel LED
-- `Show_SYS_RGB(status)` - Update system LED
+- `Set_MC_RGB(channel, num, R, G, B)` - Set channel LED with gamma correction
+- `Show_SYS_RGB(status)` - Update system LED with gamma correction
 
 **Status Display Logic:**
 - Only updates when color changes (reduces bus traffic)
