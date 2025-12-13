@@ -1076,5 +1076,14 @@ void Motion_control_init() // 初始化所有运动和传感器
         //     filament_channel_inserted[i]=false;
         // }
         filament_now_position[i] = filament_idle;//将通道初始状态设置为空闲
+        
+        // Initialize meters for pre-loaded filament to prevent retraction issues
+        // If filament is detected at startup and meters is 0, set to default value
+        if (MC_ONLINE_key_stu[i] == 1 && get_filament_meters(i) == 0.0f)
+        {
+            // Set to 1 meter (1000mm) as reasonable default for pre-loaded filament
+            // This prevents the printer from thinking there's no filament during retraction
+            add_filament_meters(i, 1.0f);
+        }
     }
 }
