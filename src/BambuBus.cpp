@@ -152,23 +152,23 @@ void set_filament_motion(int num, AMS_filament_motion motion)
     {
         _filament *filament = &(data_save.filament[num]);
         filament->motion_set = motion;
-        if (motion == AMS_filament_motion::on_use)
-            switch (motion)
-            {
-            case AMS_filament_motion::on_use:
-            case AMS_filament_motion::before_pull_back:
-                data_save.filament_use_flag = 0x04;
-                break;
-            case AMS_filament_motion::need_send_out:
-                data_save.filament_use_flag = 0x02;
-                break;
-            case AMS_filament_motion::need_pull_back:
-                data_save.filament_use_flag = 0x00;
-                break;
-            case AMS_filament_motion::idle:
-                data_save.filament_use_flag = 0x00;
-                break;
-            }
+        // Set filament use flag based on motion state
+        switch (motion)
+        {
+        case AMS_filament_motion::on_use:
+        case AMS_filament_motion::before_pull_back:
+            data_save.filament_use_flag = 0x04;
+            break;
+        case AMS_filament_motion::need_send_out:
+            data_save.filament_use_flag = 0x02;
+            break;
+        case AMS_filament_motion::need_pull_back:
+            data_save.filament_use_flag = 0x00;
+            break;
+        case AMS_filament_motion::idle:
+            data_save.filament_use_flag = 0x00;
+            break;
+        }
     }
 }
 AMS_filament_motion get_filament_motion(int num)
