@@ -118,7 +118,8 @@ void set_filament_online(int num, bool if_online)
 
 bool get_filament_online(int num)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    if ((unsigned)num < 4)
     {
         if (data_save.filament[num].statu == AMS_filament_stu::offline)
         {
