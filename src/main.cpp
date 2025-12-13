@@ -5,13 +5,7 @@
 #include "Adafruit_NeoPixel.h"
 
 extern void debug_send_run();
-// 测试用 8灯珠
-// #define LED_PA11_NUM 8
-#define LED_PA11_NUM 2
-#define LED_PA8_NUM 2
-#define LED_PB1_NUM 2
-#define LED_PB0_NUM 2
-#define LED_PD1_NUM 1
+// LED configuration is defined in config.h (included via main.h -> Debug_log.h -> config.h)
 
 // 通道RGB对象，strip_channel[Chx]，0~4为PA11/PA8/PB1/PB0
 Adafruit_NeoPixel strip_channel[4] = {
