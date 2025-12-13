@@ -10,13 +10,19 @@ extern void debug_send_run();
 // Pre-calculated gamma-corrected constants for common status colors
 // These values are computed once to avoid redundant runtime calculations
 // Based on Adafruit_NeoPixel gamma table with gamma=2.6
-// Values chosen to maintain visibility after gamma correction and brightness scaling
+//
+// IMPORTANT: Values chosen to maintain visibility after gamma correction and brightness scaling
+// The main board brightness is 35/256 (~14%), so we need higher input values to compensate.
+// 
+// Calculation rationale:
+// - Original dim indicator used value 8, giving final output: 8 * 35/256 ≈ 1.1
+// - With gamma correction, we need: gamma8(x) ≈ 8 to maintain same final output
+// - From gamma table: gamma8(66) = 8, gamma8(69) = 9
+// - This preserves the original dim but visible appearance
 namespace GammaConstants {
-    // For status indicators, we use higher input values that result in visible dim colors
-    // after gamma correction and brightness scaling (35/256 for main board, 15/256 for channels)
-    constexpr uint8_t STATUS_DIM_LOW = 66;    // gamma8(66) = 8, visually dim but visible
-    constexpr uint8_t STATUS_DIM_MED = 69;    // gamma8(69) = 9, visually dim but visible
-    constexpr uint8_t STATUS_BRIGHT = 255;    // gamma8(255) = 255, full brightness
+    constexpr uint8_t STATUS_DIM_LOW = 66;    // → gamma8(66) = 8 → 8 * 35/256 ≈ 1.1 final brightness
+    constexpr uint8_t STATUS_DIM_MED = 69;    // → gamma8(69) = 9 → 9 * 35/256 ≈ 1.2 final brightness
+    constexpr uint8_t STATUS_BRIGHT = 255;    // → gamma8(255) = 255 → full brightness for errors
 }
 
 // 通道RGB对象，strip_channel[Chx]，0~4为PA11/PA8/PB1/PB0
