@@ -93,6 +93,10 @@ void setup()
 
 void Set_MC_RGB(uint8_t channel, int num, uint8_t R, uint8_t G, uint8_t B)
 {
+    // Bug #31 Fix: Add bounds check for channel parameter to prevent buffer overflow
+    if (channel >= 4)
+        return;
+    
     int set_colors[3] = {R, G, B};
     bool is_new_colors = false;
 

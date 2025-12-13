@@ -1,6 +1,7 @@
 #include "BambuBus.h"
 #include "CRC16.h"
 #include "CRC8.h"
+#include "Debug_log.h"
 CRC16 crc_16;
 CRC8 crc_8;
 
@@ -8,6 +9,7 @@ uint8_t BambuBus_data_buf[1000];
 int BambuBus_have_data = 0;
 uint16_t BambuBus_address = 0;
 uint8_t BambuBus_AMS_num = 0; // 0~3 代表被识别为 A B C D
+uint32_t BambuBus_CRC_error_count = 0; // Bug #25: Track CRC failures
 uint8_t AMS_humidity_wet = 12; // 0~100(百分比湿度)
 
 struct _filament
@@ -235,6 +237,12 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
         {
             if (data != _RX_IRQ_crcx.calc()) // check error,return to waiting 0x3D
             {
+                // Bug #25 Fix: Add debug logging for CRC failures
+                BambuBus_CRC_error_count++;
+#ifdef Debug_log_on
+                DEBUG_MY("BambuBus CRC8 error, count: ");
+                DEBUG_num(&BambuBus_CRC_error_count, sizeof(BambuBus_CRC_error_count));
+#endif
                 _index = 0;
                 return;
             }
