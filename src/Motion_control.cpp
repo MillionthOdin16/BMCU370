@@ -122,8 +122,8 @@ void MC_PULL_ONLINE_read()
             { // 小于则离线.
                 MC_ONLINE_key_stu[i] = 0;
             }
-            else if ((MC_ONLINE_key_stu_raw[i] < 1.7f) & (MC_ONLINE_key_stu_raw[i] > 1.4f))
-            { // 仅触发外侧微动，需辅助进料
+            else if ((MC_ONLINE_key_stu_raw[i] < 1.7f) && (MC_ONLINE_key_stu_raw[i] > 1.4f))
+            { // 仅触发外侧微动，需辅助进料 (fixed: use && not &)
                 MC_ONLINE_key_stu[i] = 2;
             }
             else if (MC_ONLINE_key_stu_raw[i] > 1.7f)

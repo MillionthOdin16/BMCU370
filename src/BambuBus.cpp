@@ -6,7 +6,7 @@ CRC16 crc_16;
 CRC8 crc_8;
 
 uint8_t BambuBus_data_buf[BAMBUBUS_BUFFER_SIZE];
-int BambuBus_have_data = 0;
+volatile int BambuBus_have_data = 0;  // volatile: written in ISR (RX_IRQ), read in main loop (BambuBus_run)
 uint16_t BambuBus_address = 0;
 uint8_t BambuBus_AMS_num = 0; // 0~3 代表被识别为 A B C D
 uint32_t BambuBus_CRC_error_count = 0; // Bug #25: Track CRC failures
@@ -1249,8 +1249,16 @@ BambuBus_package_type BambuBus_run()
     BambuBus_package_type stu = BambuBus_package_type::NONE;
     static uint64_t time_set = 0;
     static uint64_t time_motion = 0;
+    static bool first_run = true;
 
     uint64_t timex = get_time64();
+
+    // Initialize timeouts on first run to prevent false offline detection
+    if (first_run) {
+        time_set = timex + 1000;
+        time_motion = timex + 1000;
+        first_run = false;
+    }
 
     /*for (auto i : data_save.filament)
     {
