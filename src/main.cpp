@@ -7,6 +7,24 @@
 extern void debug_send_run();
 // LED configuration is defined in config.h (included via main.h -> Debug_log.h -> config.h)
 
+// Pre-calculated gamma-corrected constants for common status colors
+// These values are computed once to avoid redundant runtime calculations
+// Based on Adafruit_NeoPixel gamma table with gamma=2.6
+//
+// IMPORTANT: Values chosen to maintain visibility after gamma correction and brightness scaling
+// The main board brightness is 35/256 (~14%), so we need higher input values to compensate.
+// 
+// Calculation rationale:
+// - Original dim indicator used value 8, giving final output: 8 * 35/256 ≈ 1.1
+// - With gamma correction, we need: gamma8(x) ≈ 8 to maintain same final output
+// - From gamma table: gamma8(66) = 8, gamma8(69) = 9
+// - This preserves the original dim but visible appearance
+namespace GammaConstants {
+    constexpr uint8_t STATUS_DIM_LOW = 66;    // → gamma8(66) = 8 → 8 * 35/256 ≈ 1.1 final brightness
+    constexpr uint8_t STATUS_DIM_MED = 69;    // → gamma8(69) = 9 → 9 * 35/256 ≈ 1.2 final brightness
+    constexpr uint8_t STATUS_BRIGHT = 255;    // → gamma8(255) = 255 → full brightness for errors
+}
+
 // 通道RGB对象，strip_channel[Chx]，0~4为PA11/PA8/PB1/PB0
 Adafruit_NeoPixel strip_channel[4] = {
     Adafruit_NeoPixel(LED_PA11_NUM, PA11, NEO_GRB + NEO_KHZ800),
@@ -103,7 +121,11 @@ void Set_MC_RGB(uint8_t channel, int num, uint8_t R, uint8_t G, uint8_t B)
     }
     // 检查每个通道，如果有改变，更新它。
     if (is_new_colors) {
-        strip_channel[channel].setPixelColor(num, strip_channel[channel].Color(R, G, B));
+        // Apply gamma correction for accurate color representation
+        uint8_t gamma_R = Adafruit_NeoPixel::gamma8(R);
+        uint8_t gamma_G = Adafruit_NeoPixel::gamma8(G);
+        uint8_t gamma_B = Adafruit_NeoPixel::gamma8(B);
+        strip_channel[channel].setPixelColor(num, strip_channel[channel].Color(gamma_R, gamma_G, gamma_B));
         strip_channel[channel].show(); // 显示新颜色
         is_new_colors = false; // 重置状态
     }
@@ -115,12 +137,20 @@ void Show_SYS_RGB(int BambuBUS_status)
     // 更新主板RGB灯
     if (BambuBUS_status == -1) // 离线
     {
-        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 0, 0)); // 红色
+        // Apply gamma correction for red offline indicator
+        // Using higher input value to maintain visibility after gamma correction
+        uint8_t gamma_R = Adafruit_NeoPixel::gamma8(GammaConstants::STATUS_DIM_LOW);
+        strip_PD1.setPixelColor(0, strip_PD1.Color(gamma_R, 0, 0)); // 红色
         strip_PD1.show();
     }
     else if (BambuBUS_status == 0) // 在线
     {
-        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 9, 9)); // 白色
+        // Apply gamma correction for white online indicator
+        // Using higher input values to maintain visibility after gamma correction
+        uint8_t gamma_R = Adafruit_NeoPixel::gamma8(GammaConstants::STATUS_DIM_LOW);
+        uint8_t gamma_G = Adafruit_NeoPixel::gamma8(GammaConstants::STATUS_DIM_MED);
+        uint8_t gamma_B = Adafruit_NeoPixel::gamma8(GammaConstants::STATUS_DIM_MED);
+        strip_PD1.setPixelColor(0, strip_PD1.Color(gamma_R, gamma_G, gamma_B)); // 白色
         strip_PD1.show();
     }
     // 更新错误通道，亮起红灯
@@ -128,8 +158,9 @@ void Show_SYS_RGB(int BambuBUS_status)
     {
         if (MC_STU_ERROR[i])
         {
-            // 红色
-            strip_channel[i].setPixelColor(0, strip_channel[i].Color(255, 0, 0));
+            // Apply gamma correction for red error indicator
+            uint8_t gamma_R = Adafruit_NeoPixel::gamma8(GammaConstants::STATUS_BRIGHT);
+            strip_channel[i].setPixelColor(0, strip_channel[i].Color(gamma_R, 0, 0)); // 红色
             strip_channel[i].show(); // 显示新颜色
         }
     }

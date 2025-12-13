@@ -6,6 +6,21 @@ This changelog documents the development history of the BMCU-C 370 Hall version 
 
 ---
 
+## [Unreleased]
+
+### Improved
+- **LED Color Accuracy:** Applied gamma correction (gamma=2.6) to all RGB LED colors for more accurate color representation
+  - Filament colors now display more accurately
+  - Status indicator colors (red, blue, white) are perceptually correct
+  - Better match between intended and displayed colors
+  - Uses Adafruit_NeoPixel's built-in gamma correction table
+
+### Changed
+- `Set_MC_RGB()` now applies gamma correction to all RGB values before displaying
+- `Show_SYS_RGB()` now applies gamma correction to system status LED colors
+
+---
+
 ## [V0.1-0021] - 2025-12-13
 
 ### Fixed
