@@ -474,7 +474,7 @@ Update status for items #7, #9, #10:
 ```markdown
 ### 7. Commented-Out Code Sections
 
-**Status:** ✅ **PARTIALLY RESOLVED** (Flash verification re-enabled in V0.1-0021)
+**Status:** ✅ **RESOLVED** (Flash verification re-enabled in V0.1-0021)
 
 ### 9. Watchdog Timer Disabled
 
