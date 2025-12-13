@@ -594,6 +594,7 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
                 if (data_save.BambuBus_now_filament_num != read_num) // on change
                 {
                     // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+                    // Note: This also correctly rejects 0xFF (no filament selected) as (unsigned)0xFF = 255
                     if ((unsigned)data_save.BambuBus_now_filament_num < 4)
                     {
                         data_save.filament[data_save.BambuBus_now_filament_num].motion_set = AMS_filament_motion::idle;
@@ -633,6 +634,7 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x00)) // 03 00(FF)
             {
                 // Bug #1 Fix: Check bounds BEFORE taking pointer to prevent buffer overflow
+                // Note: This also correctly rejects 0xFF (no filament selected) as (unsigned)0xFF = 255
                 if ((unsigned)data_save.BambuBus_now_filament_num < 4)
                 {
                     _filament *filament = &(data_save.filament[data_save.BambuBus_now_filament_num]);
@@ -716,6 +718,7 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
         else if ((read_num == 0xFF) && (statu_flags == 0x01))
         {
             // Bug #1 Fix: Check bounds before accessing filament array
+            // Note: This also correctly rejects 0xFF (no filament selected) as (unsigned)0xFF = 255
             if ((unsigned)data_save.BambuBus_now_filament_num < 4)
             {
                 AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
