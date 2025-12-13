@@ -37,7 +37,7 @@ Download and install VS Code from: https://code.visualstudio.com/
 ```bash
 git clone https://github.com/MillionthOdin16/BMCU370.git
 cd BMCU370
-```bash
+```
 
 Or clone the original:
 ```bash

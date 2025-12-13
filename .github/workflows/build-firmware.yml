@@ -103,12 +103,7 @@ jobs:
         fi
         
         echo "changelog_file=$CHANGELOG_FILE" >> $GITHUB_OUTPUT
-        
-    - name: Build firmware
-      run: |
-        echo "Building firmware for release ${{ steps.get_version.outputs.version }}..."
-        pio run
-        
+
     - name: Get version and build metadata
       id: get_version
       run: |
@@ -127,7 +122,12 @@ jobs:
         echo "commit_short=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
         echo "platform=ch32v203c8t6" >> $GITHUB_OUTPUT
         echo "arch=riscv32" >> $GITHUB_OUTPUT
-        
+
+    - name: Build firmware
+      run: |
+        echo "Building firmware for release ${{ steps.get_version.outputs.version }}..."
+        pio run
+
     - name: Prepare firmware artifacts
       run: |
         # Create release directory with organized structure

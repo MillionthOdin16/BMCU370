@@ -106,19 +106,20 @@ This document tracks inconsistencies, questions, and items that need resolution 
 
 ### 7. Commented-Out Code Sections
 
+**Status:** ✅ **PARTIALLY RESOLVED** (Flash verification re-enabled in V0.1-0021)
+
 **Issue:** Several sections of commented code without explanation
 
 **Examples:**
 - `main.cpp` line 8: `// #define LED_PA11_NUM 8` (testing 8 LEDs?)
 - `BambuBus.cpp` line 32: A1 control abandoned in changelog
-- `Flash_saves.cpp` lines 65-81: Verification code commented out
+- ~~`Flash_saves.cpp` lines 65-81: Verification code commented out~~ ✅ **FIXED** - Re-enabled in V0.1-0021
 
-**Questions:**
-- Is the commented verification code (Flash_saves.cpp) intentionally disabled?
-- Should it be removed or re-enabled?
+**Remaining Questions:**
 - Are the 8-LED test configurations safe to remove?
+- Should A1 control code be removed or documented?
 
-**Resolution Needed:** Review commented code, decide to remove or document why disabled
+**Resolution Needed:** Review remaining commented code, decide to remove or document why disabled
 
 ---
 
@@ -140,32 +141,35 @@ This document tracks inconsistencies, questions, and items that need resolution 
 
 ### 9. Watchdog Timer Disabled
 
+**Status:** ✅ **DOCUMENTED** (Design decision per ACTIVE_ISSUES.md Bug #26)
+
 **Issue:** Watchdog explicitly disabled
 - `main.cpp` line 77-78: `WWDG_DeInit()` and clock disabled
-- No explanation why
+- Intentional for development/debugging
 
-**Questions:**
-- Is this temporary for development?
-- Should it be re-enabled for production?
-- Are there stability concerns without watchdog?
+**Resolution:**
+- Watchdog remains disabled as design decision for development builds
+- Production builds should consider enabling watchdog with appropriate timeout
+- Documented in ACTIVE_ISSUES.md as "No Change - Design Decision"
 
-**Resolution Needed:** Document reason for disabling watchdog, consider re-enabling with proper timing
+**Recommendation:** Consider enabling watchdog in production firmware releases
 
 ---
 
 ### 10. Flash Write Verification
 
-**Issue:** Flash write verification code commented out
-- `Flash_saves.cpp` lines 65-81
-- Write operation returns true without verifying
-- Risk of silent data corruption
+**Status:** ✅ **RESOLVED** (Fixed in V0.1-0021 - Bug #23)
 
-**Questions:**
-- Why was verification disabled?
-- Should it be re-enabled?
-- Are there flash write reliability issues?
+**Issue:** Flash write verification code was commented out
 
-**Resolution Needed:** Investigate flash reliability, consider re-enabling verification
+**Resolution:**
+- ✅ Verification code re-enabled in V0.1-0021
+- Function now properly verifies written data
+- Returns false if verification fails
+- Prevents silent data corruption
+- Documented in CHANGELOG.md and ACTIVE_ISSUES.md
+
+**Impact:** Medium priority security bug resolved
 
 ---
 

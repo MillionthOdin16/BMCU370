@@ -9,7 +9,7 @@ This guide will help you get started with your BMCU-C 370 Hall Effect version fi
 ### Prerequisites
 - ✅ Completed BMCU-C assembly (see [Installation Guide](installation.md) if not done)
 - ✅ Bambu Lab A1 or A1 mini printer
-- ✅ Firmware flashed on BMCU-C mainboard (version 0020 recommended)
+- ✅ Firmware flashed on BMCU-C mainboard (version 0021 recommended)
 - ✅ 24V power supply (typically from printer's AMS hub connection)
 - ✅ Filament spools ready to load
 
