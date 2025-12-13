@@ -4,7 +4,7 @@
 **Source:** REPOSITORY_ANALYSIS_REPORT.md  
 **Methodology:** Systematic code review of all bugs/issues listed in the analysis report to identify which ones actually exist in the current BMCU370 codebase.
 
-**Summary:** Out of 31 bugs identified in the analysis report, **23 bugs have been confirmed to exist** in the current codebase. These are documented below with specific file locations, line numbers, and code evidence.
+**Summary:** Out of 31 bugs identified in the analysis report, **13 bugs have been definitively confirmed to exist** in the current codebase, with 19 additional bugs requiring further investigation. These are documented below with specific file locations, line numbers, and code evidence.
 
 ---
 
@@ -18,7 +18,7 @@
 **Evidence:**
 Multiple functions only check upper bound (`num < 4`) but not lower bound (`num >= 0`):
 
-1. **`reset_filament_meters(int num)` - Line 73-76**
+1. **`reset_filament_meters(int num)` - Line 73-77**
    ```cpp
    void reset_filament_meters(int num)
    {
@@ -90,8 +90,10 @@ Multiple functions only check upper bound (`num < 4`) but not lower bound (`num 
        return;
    long_packge_filament[0] = BambuBus_AMS_num;
    long_packge_filament[1] = filament_num;
-   memcpy(long_packge_filament + 19, data_save.filament[filament_num].ID, ...);  // ❌ OVERFLOW RISK!
-   // ... multiple array accesses with filament_num without bounds checking
+   // Truncated for brevity - multiple array accesses follow:
+   memcpy(long_packge_filament + 19, data_save.filament[filament_num].ID, sizeof(data_save.filament[filament_num].ID));  // ❌ OVERFLOW RISK!
+   memcpy(long_packge_filament + 27, data_save.filament[filament_num].name, sizeof(data_save.filament[filament_num].name));
+   // ... multiple more array accesses with filament_num without bounds checking
    ```
 
 **Impact:** 
@@ -170,7 +172,7 @@ void add_filament_meters(int num, float meters)
 
 **Evidence:**
 
-1. **`send_for_set_filament()` - Line 1147-1152**
+1. **`send_for_set_filament()` - Line 1147-1163**
    ```cpp
    void send_for_set_filament(unsigned char *buf, int length)
    {
@@ -179,12 +181,13 @@ void add_filament_meters(int num, float meters)
        if (AMS_num != BambuBus_AMS_num)
            return;
        read_num = read_num & 0x0F;  // ❌ Can be 0-15, but array is only 0-3!
-       memcpy(data_save.filament[read_num].ID, buf + 7, ...);  // ❌ OVERFLOW if read_num >= 4!
+       // Truncated for brevity - multiple array accesses follow:
+       memcpy(data_save.filament[read_num].ID, buf + 7, sizeof(data_save.filament[read_num].ID));  // ❌ OVERFLOW if read_num >= 4!
        data_save.filament[read_num].color_R = buf[15];         // ❌ OVERFLOW!
        // ... more array accesses without bounds validation
    ```
 
-2. **`send_for_set_filament_type2()` - Line 1172-1182**
+2. **`send_for_set_filament_type2()` - Line 1165-1183**
    ```cpp
    void send_for_set_filament_type2(unsigned char *buf, int length)
    {
@@ -194,7 +197,8 @@ void add_filament_meters(int num, float meters)
        if (AMS_num != BambuBus_AMS_num)
            return;
        uint8_t read_num = printer_data_long.datas[1];  // ❌ No validation!
-       memcpy(data_save.filament[read_num].ID, printer_data_long.datas + 2, ...);  // ❌ OVERFLOW!
+       // Truncated for brevity - multiple array accesses follow:
+       memcpy(data_save.filament[read_num].ID, printer_data_long.datas + 2, sizeof(data_save.filament[read_num].ID));  // ❌ OVERFLOW!
        // ... more array accesses
    ```
 
@@ -215,6 +219,7 @@ void add_filament_meters(int num, float meters)
 
 **Evidence:**
 ```cpp
+// In BambuBus.cpp UART receive interrupt handler
 else // have 0x3D,normal data
 {
     BambuBus_data_buf[_index] = data;  // ❌ Line 199: Write happens FIRST, BEFORE bounds check!
@@ -222,7 +227,7 @@ else // have 0x3D,normal data
     {
         // ... packet parsing logic
     }
-    // ... more processing
+    // ... more processing (lines 200-228)
     ++_index;  // Line 229: Increment
     if (_index >= length) // recv over,copy package data
     {
@@ -521,8 +526,9 @@ DMA_Cmd(DMA1_Channel1, ENABLE); // ❌ No error interrupt or overrun flag checki
 **Already Fixed:** 1 (Bug #6)  
 **Requires Investigation:** 19 (Bugs #4-#5, #7-#18, #20-#21, #28-#30)
 
-**Total Confirmed Bugs:** 11 critical/high/medium + 2 low = **13 bugs definitively confirmed**  
-**Additional Bugs Likely Present:** 8-10 (from investigation category, based on code patterns)
+**Total Confirmed Bugs:** 5 + 1 + 3 + 2 = **11 bugs definitively confirmed as existing**  
+**Low Priority/Design Choices:** 2 (Bugs #25, #26 - less critical)  
+**Additional Bugs Likely Present:** 8-10 (from investigation category, based on code patterns and user reports)
 
 ---
 
