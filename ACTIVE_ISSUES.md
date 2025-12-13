@@ -11,100 +11,29 @@
 ## 🔴 CRITICAL PRIORITY - Security & Safety Bugs (VERIFIED)
 
 ### ✅ Bug #1: Buffer Overflow - Array Index Bounds Checking (RESOLVED)
-**Status:** ✅ **RESOLVED - Fixed 2025-12-13**  
+**Status:** ✅ **RESOLVED - Fully Fixed 2025-12-13**  
 **Location:** `src/BambuBus.cpp`  
 **Severity:** CRITICAL - Buffer underflow vulnerability
 
 **Fix Applied:**
-Changed all array index checks from `if (num < 4)` to `if ((unsigned)num < 4)` to check both lower and upper bounds simultaneously. This prevents negative indices from causing buffer underflow.
+Changed all array index checks from `if (num < 4)` to `if ((unsigned)num < 4)` to check both lower and upper bounds simultaneously. This prevents negative indices from causing buffer underflow and also properly rejects the 0xFF sentinel value used for "no filament selected".
 
-**Evidence:**
-Multiple functions only check upper bound (`num < 4`) but not lower bound (`num >= 0`):
+**Functions Fixed:**
+1. `reset_filament_meters(int num)` - Line 78
+2. `add_filament_meters(int num, float meters)` - Line 85
+3. `get_filament_meters(int num)` - Line 94
+4. `set_filament_online(int num, bool if_online)` - Line 102
+5. `set_filament_motion(int num, AMS_filament_motion motion)` - Line 140
+6. `get_filament_motion(int num)` - Line 166
+7. `get_filament_online(int num)` - Line 122 (completed in final fix)
+8. `send_for_long_package_filament()` - Line 1062
+9. `set_motion()` - Lines 589, 597, 636, 656, 720 (completed in final fix)
 
-1. **`reset_filament_meters(int num)` - Line 73-77**
-   ```cpp
-   void reset_filament_meters(int num)
-   {
-       if (num < 4)  // ❌ Missing: num >= 0 check
-           data_save.filament[num].meters = 0;
-   }
-   ```
-
-2. **`add_filament_meters(int num, float meters)` - Line 78-85**
-   ```cpp
-   void add_filament_meters(int num, float meters)
-   {
-       if (num < 4)  // ❌ Missing: num >= 0 check
-       {
-           if ((data_save.filament[num].motion_set == AMS_filament_motion::on_use) || 
-               (data_save.filament[num].motion_set == AMS_filament_motion::need_pull_back))
-               data_save.filament[num].meters += meters;
-       }
-   }
-   ```
-
-3. **`get_filament_meters(int num)` - Line 86-92**
-   ```cpp
-   float get_filament_meters(int num)
-   {
-       if (num < 4)  // ❌ Missing: num >= 0 check
-           return data_save.filament[num].meters;
-       else
-           return 0;
-   }
-   ```
-
-4. **`set_filament_online(int num, bool if_online)` - Line 93-101**
-   ```cpp
-   void set_filament_online(int num, bool if_online)
-   {
-       if (num < 4)  // ❌ Missing: num >= 0 check
-       {
-           if (if_online)
-           {
-               data_save.filament[num].statu = AMS_filament_stu::online;
-           }
-   ```
-
-5. **`set_filament_motion(int num, AMS_filament_motion motion)` - Line 130-133**
-   ```cpp
-   void set_filament_motion(int num, AMS_filament_motion motion)
-   {
-       if (num < 4)  // ❌ Missing: num >= 0 check
-       {
-           _filament *filament = &(data_save.filament[num]);
-   ```
-
-6. **`get_filament_motion(int num)` - Line 155-160**
-   ```cpp
-   AMS_filament_motion get_filament_motion(int num)
-   {
-       if (num < 4)  // ❌ Missing: num >= 0 check
-           return data_save.filament[num].motion_set;
-       else
-           return AMS_filament_motion::idle;
-   }
-   ```
-
-7. **`send_for_long_package_filament()` - Line 1041-1060 - MOST CRITICAL**
-   ```cpp
-   uint8_t filament_num = printer_data_long.datas[1];  // ❌ External input, NO validation!
-   if (AMS_num != BambuBus_AMS_num)
-       return;
-   long_packge_filament[0] = BambuBus_AMS_num;
-   long_packge_filament[1] = filament_num;
-   // Truncated for brevity - multiple array accesses follow:
-   memcpy(long_packge_filament + 19, data_save.filament[filament_num].ID, sizeof(data_save.filament[filament_num].ID));  // ❌ OVERFLOW RISK!
-   memcpy(long_packge_filament + 27, data_save.filament[filament_num].name, sizeof(data_save.filament[filament_num].name));
-   // ... multiple more array accesses with filament_num without bounds checking
-   ```
+**Additional Critical Fix:**
+At line 636, reordered code to check bounds BEFORE taking pointer address to prevent buffer overflow.
 
 **Impact:** 
-- Negative indices can cause buffer underflow and memory corruption
-- `send_for_long_package_filament()` especially critical as `filament_num` comes from external printer data
-- Could cause crashes, undefined behavior, or memory corruption
-
-**Required Fix:** Add `num >= 0 && num < 4` checks (or `(unsigned)num < 4`) to all functions
+All buffer underflow and overflow vulnerabilities from negative or out-of-bounds array indices have been eliminated.
 
 ---
 

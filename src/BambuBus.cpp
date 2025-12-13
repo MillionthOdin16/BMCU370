@@ -118,7 +118,8 @@ void set_filament_online(int num, bool if_online)
 
 bool get_filament_online(int num)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    if ((unsigned)num < 4)
     {
         if (data_save.filament[num].statu == AMS_filament_stu::offline)
         {
@@ -585,13 +586,16 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
     time_last = time_now;
     if (BambuBus_address == BambuBus_AMS) // AMS08
     {
-        if (read_num < 4)
+        // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+        if ((unsigned)read_num < 4)
         {
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x00)) // 03 00
             {
                 if (data_save.BambuBus_now_filament_num != read_num) // on change
                 {
-                    if (data_save.BambuBus_now_filament_num < 4)
+                    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+                    // This also rejects 0xFF (no filament selected) and any negative values
+                    if ((unsigned)data_save.BambuBus_now_filament_num < 4)
                     {
                         data_save.filament[data_save.BambuBus_now_filament_num].motion_set = AMS_filament_motion::idle;
                         data_save.filament_use_flag = 0x00;
@@ -629,9 +633,11 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
         {
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x00)) // 03 00(FF)
             {
-                _filament *filament = &(data_save.filament[data_save.BambuBus_now_filament_num]);
-                if (data_save.BambuBus_now_filament_num < 4)
+                // Bug #1 Fix: Check bounds BEFORE taking pointer to prevent buffer overflow
+                // This also rejects 0xFF (no filament selected) and any negative values
+                if ((unsigned)data_save.BambuBus_now_filament_num < 4)
                 {
+                    _filament *filament = &(data_save.filament[data_save.BambuBus_now_filament_num]);
                     if (filament->motion_set == AMS_filament_motion::on_use)
                     {
                         filament->motion_set = AMS_filament_motion::need_pull_back;
@@ -652,7 +658,8 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
     }
     else if (BambuBus_address == BambuBus_AMS_lite) // AMS lite
     {
-        if (read_num < 4)
+        // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+        if ((unsigned)read_num < 4)
         {
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x3F)) // 03 3F
             {
@@ -710,14 +717,19 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
         }
         else if ((read_num == 0xFF) && (statu_flags == 0x01))
         {
-            AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
-            if (motion != AMS_filament_motion::on_use)
+            // Bug #1 Fix: Check bounds before accessing filament array
+            // This also rejects 0xFF (no filament selected) and any negative values
+            if ((unsigned)data_save.BambuBus_now_filament_num < 4)
             {
-                for (int i = 0; i < 4; i++)
+                AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
+                if (motion != AMS_filament_motion::on_use)
                 {
-                    data_save.filament[i].motion_set = AMS_filament_motion::idle;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        data_save.filament[i].motion_set = AMS_filament_motion::idle;
+                    }
+                    data_save.filament_use_flag = 0x00;
                 }
-                data_save.filament_use_flag = 0x00;
             }
         }
     }
