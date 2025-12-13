@@ -42,10 +42,6 @@ const uint64_t Assist_send_time = ASSIST_SEND_TIME_MS; ///< Feed assist duration
 const float_t P1X_OUT_filament_meters = P1X_OUT_FILAMENT_MM;        ///< Internal retraction distance
 float_t last_total_distance[MAX_FILAMENT_CHANNELS] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< Initial distance when retraction started
 
-// AMS Lite retraction timeout safety mechanism
-uint64_t retraction_start_time[MAX_FILAMENT_CHANNELS] = {0, 0, 0, 0}; ///< Time when retraction started (ms)
-const uint64_t AMS_LITE_RETRACTION_TIMEOUT_MS = 8000; ///< Safety timeout for AMS Lite retraction (8 seconds for ~200mm at 50mm/s)
-
 // Dual micro-switch configuration
 const bool is_two = false; ///< Use dual micro-switches
 
@@ -422,26 +418,7 @@ public:
                 }
                 if (motion == filament_motion_enum::filament_motion_pull) // 回抽
                 {
-                    // Safety timeout check for AMS Lite to prevent infinite retraction
-                    if (device_type == BambuBus_AMS_lite)
-                    {
-                        uint64_t current_time = get_time64();
-                        if (retraction_start_time[CHx] > 0 && 
-                            (current_time - retraction_start_time[CHx]) > AMS_LITE_RETRACTION_TIMEOUT_MS)
-                        {
-                            // Timeout exceeded - stop motor to prevent over-retraction
-                            speed_set = 0;
-                            retraction_start_time[CHx] = 0; // Reset timer
-                        }
-                        else
-                        {
-                            speed_set = -50;
-                        }
-                    }
-                    else
-                    {
-                        speed_set = -50;
-                    }
+                    speed_set = -50;
                 }
                 x = dir * PID_speed.caculate(now_speed - speed_set, time_E);
             }
@@ -625,8 +602,6 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 filament_now_position[num] = filament_pulling_back;
                 if (device_type == BambuBus_AMS_lite)
                 {
-                    // Start retraction with timeout safety mechanism
-                    retraction_start_time[num] = get_time64();
                     MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_pull, 100);
                 }
                 // Prepare_For_filament_Pull_Back(OUT_filament_meters); // 通过距离控制退料是否完成
@@ -642,12 +617,10 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                     pull_state_old = true; // 首次不会往后拽，会等待触发低电压位，避免刚进入料就被拉出。
                     filament_now_position[num] = filament_using; // 标记为使用中
                     time_end = time_now + 1500;                  // 防止未被咬合, 持续进1.5秒
-                    retraction_start_time[num] = 0; // Reset retraction timer
                 }
                 else if (filament_now_position[num] == filament_using) // 已经触发且处于使用中
                 {
                     last_total_distance[i] = 0; // 重置退料距离
-                    retraction_start_time[num] = 0; // Reset retraction timer
                     if (time_now > time_end)
                     {                                          // 已超1.5秒，进入通道使用 进行续料
                         MC_STU_RGB_set(num, 255, 255, 255); // 白色
@@ -663,7 +636,6 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
             }
             case AMS_filament_motion::idle:
                 filament_now_position[num] = filament_idle;
-                retraction_start_time[num] = 0; // Reset retraction timer
                 MOTOR_CONTROL[num].set_motion(filament_motion_enum::filament_motion_pressure_ctrl_idle, 100);
                 for (int i = 0; i < 4; i++)
                 {
