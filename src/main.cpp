@@ -103,7 +103,11 @@ void Set_MC_RGB(uint8_t channel, int num, uint8_t R, uint8_t G, uint8_t B)
     }
     // 检查每个通道，如果有改变，更新它。
     if (is_new_colors) {
-        strip_channel[channel].setPixelColor(num, strip_channel[channel].Color(R, G, B));
+        // Apply gamma correction for accurate color representation
+        uint8_t gamma_R = Adafruit_NeoPixel::gamma8(R);
+        uint8_t gamma_G = Adafruit_NeoPixel::gamma8(G);
+        uint8_t gamma_B = Adafruit_NeoPixel::gamma8(B);
+        strip_channel[channel].setPixelColor(num, strip_channel[channel].Color(gamma_R, gamma_G, gamma_B));
         strip_channel[channel].show(); // 显示新颜色
         is_new_colors = false; // 重置状态
     }
@@ -115,12 +119,18 @@ void Show_SYS_RGB(int BambuBUS_status)
     // 更新主板RGB灯
     if (BambuBUS_status == -1) // 离线
     {
-        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 0, 0)); // 红色
+        // Apply gamma correction for red offline indicator
+        uint8_t gamma_R = Adafruit_NeoPixel::gamma8(8);
+        strip_PD1.setPixelColor(0, strip_PD1.Color(gamma_R, 0, 0)); // 红色
         strip_PD1.show();
     }
     else if (BambuBUS_status == 0) // 在线
     {
-        strip_PD1.setPixelColor(0, strip_PD1.Color(8, 9, 9)); // 白色
+        // Apply gamma correction for white online indicator
+        uint8_t gamma_R = Adafruit_NeoPixel::gamma8(8);
+        uint8_t gamma_G = Adafruit_NeoPixel::gamma8(9);
+        uint8_t gamma_B = Adafruit_NeoPixel::gamma8(9);
+        strip_PD1.setPixelColor(0, strip_PD1.Color(gamma_R, gamma_G, gamma_B)); // 白色
         strip_PD1.show();
     }
     // 更新错误通道，亮起红灯
@@ -128,8 +138,9 @@ void Show_SYS_RGB(int BambuBUS_status)
     {
         if (MC_STU_ERROR[i])
         {
-            // 红色
-            strip_channel[i].setPixelColor(0, strip_channel[i].Color(255, 0, 0));
+            // Apply gamma correction for red error indicator
+            uint8_t gamma_R = Adafruit_NeoPixel::gamma8(255);
+            strip_channel[i].setPixelColor(0, strip_channel[i].Color(gamma_R, 0, 0)); // 红色
             strip_channel[i].show(); // 显示新颜色
         }
     }
