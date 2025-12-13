@@ -44,17 +44,18 @@ AS5600_soft_IIC_many::~AS5600_soft_IIC_many()
 {
     if (numbers > 0)
     {
-        delete IO_SDA;
-        delete IO_SCL;
-        delete port_SDA;
-        delete port_SCL;
-        delete pin_SDA;
-        delete pin_SCL;
-        delete online;
-        delete magnet_stu;
-        delete error;
-        delete raw_angle;
-        delete data;
+        // Bug #19 Fix: Use delete[] for arrays allocated with new[]
+        delete[] IO_SDA;
+        delete[] IO_SCL;
+        delete[] port_SDA;
+        delete[] port_SCL;
+        delete[] pin_SDA;
+        delete[] pin_SCL;
+        delete[] online;
+        delete[] magnet_stu;
+        delete[] error;
+        delete[] raw_angle;
+        delete[] data;
     }
 }
 

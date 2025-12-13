@@ -62,22 +62,23 @@ bool Flash_saves(void *buf, uint32_t length, uint32_t address)
 
     FLASH_Lock();
     __enable_irq();
-    /*
-        address_i = address;
-        data_ptr=(uint16_t *)buf;
-        while ((address_i < end_address) && (MemoryProgramStatus != FAILED))
+    
+    // Bug #23 Fix: Enable flash write verification to detect corruption
+    address_i = address;
+    data_ptr = (uint16_t *)buf;
+    FLASH_Status MemoryProgramStatus = FLASH_COMPLETE;
+    while ((address_i < end_address) && (MemoryProgramStatus == FLASH_COMPLETE))
+    {
+        if ((*(__IO uint16_t *)address_i) != *data_ptr)
         {
-            if ((*(__IO uint16_t *)address_i) != *data_ptr)
-            {
-                MemoryProgramStatus = FAILED;
-            }
-            address_i += 2;
-            data_ptr++;
+            MemoryProgramStatus = FLASH_ERROR_PG;
         }
+        address_i += 2;
+        data_ptr++;
+    }
 
-        if (MemoryProgramStatus == FAILED)
-            return false;
-        else
-            return true;*/
-    return true;
+    if (MemoryProgramStatus != FLASH_COMPLETE)
+        return false;
+    else
+        return true;
 }

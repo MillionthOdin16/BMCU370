@@ -46,6 +46,9 @@ void ADC_DMA_init()
         DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
         DMA_Init(DMA1_Channel1, &DMA_InitStructure);
 
+        // Bug #24 Fix: Enable DMA error interrupt for better error detection
+        DMA_ITConfig(DMA1_Channel1, DMA_IT_TE, ENABLE); // Transfer Error interrupt
+        
         DMA_Cmd(DMA1_Channel1, ENABLE); // 打开DMA
     }
 
@@ -84,6 +87,14 @@ void ADC_DMA_init()
 
 float *ADC_DMA_get_value()
 {
+    // Bug #24 Fix: Check for DMA errors before processing data
+    if (DMA_GetFlagStatus(DMA1_FLAG_TE1))
+    {
+        // DMA Transfer Error detected, clear flag and return NULL
+        DMA_ClearFlag(DMA1_FLAG_TE1);
+        return NULL;
+    }
+    
     for (int i = 0; i < 8; i++)
     {
         int data_sum = 0;

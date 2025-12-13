@@ -1,6 +1,7 @@
 #include "BambuBus.h"
 #include "CRC16.h"
 #include "CRC8.h"
+#include "Debug_log.h"
 CRC16 crc_16;
 CRC8 crc_8;
 
@@ -8,6 +9,7 @@ uint8_t BambuBus_data_buf[1000];
 int BambuBus_have_data = 0;
 uint16_t BambuBus_address = 0;
 uint8_t BambuBus_AMS_num = 0; // 0~3 代表被识别为 A B C D
+uint32_t BambuBus_CRC_error_count = 0; // Bug #25: Track CRC failures
 uint8_t AMS_humidity_wet = 12; // 0~100(百分比湿度)
 
 struct _filament
@@ -72,12 +74,15 @@ uint16_t get_now_BambuBus_device_type()
 
 void reset_filament_meters(int num)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    if ((unsigned)num < 4)
         data_save.filament[num].meters = 0;
 }
 void add_filament_meters(int num, float meters)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    // Bug #3 Fix: Check that meters is non-negative
+    if ((unsigned)num < 4 && meters >= 0.0f)
     {
         if ((data_save.filament[num].motion_set == AMS_filament_motion::on_use) || (data_save.filament[num].motion_set == AMS_filament_motion::need_pull_back))
             data_save.filament[num].meters += meters;
@@ -85,14 +90,16 @@ void add_filament_meters(int num, float meters)
 }
 float get_filament_meters(int num)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    if ((unsigned)num < 4)
         return data_save.filament[num].meters;
     else
         return 0;
 }
 void set_filament_online(int num, bool if_online)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    if ((unsigned)num < 4)
     {
         if (if_online)
         {
@@ -129,7 +136,8 @@ bool get_filament_online(int num)
 }
 void set_filament_motion(int num, AMS_filament_motion motion)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    if ((unsigned)num < 4)
     {
         _filament *filament = &(data_save.filament[num]);
         filament->motion_set = motion;
@@ -154,7 +162,8 @@ void set_filament_motion(int num, AMS_filament_motion motion)
 }
 AMS_filament_motion get_filament_motion(int num)
 {
-    if (num < 4)
+    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
+    if ((unsigned)num < 4)
         return data_save.filament[num].motion_set;
     else
         return AMS_filament_motion::idle;
@@ -196,6 +205,12 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
     }
     else // have 0x3D,normal data
     {
+        // Bug #27 Fix: Check bounds BEFORE write to prevent buffer overflow
+        if (_index >= 1000)
+        {
+            _index = 0;
+            return;
+        }
         BambuBus_data_buf[_index] = data;
         if (_index == 1) // package type byte
         {
@@ -222,6 +237,12 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
         {
             if (data != _RX_IRQ_crcx.calc()) // check error,return to waiting 0x3D
             {
+                // Bug #25 Fix: Add debug logging for CRC failures
+                BambuBus_CRC_error_count++;
+#ifdef Debug_log_on
+                DEBUG_MY("BambuBus CRC8 error, count: ");
+                DEBUG_num(&BambuBus_CRC_error_count, sizeof(BambuBus_CRC_error_count));
+#endif
                 _index = 0;
                 return;
             }
@@ -232,10 +253,6 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
             _index = 0;
             memcpy(buf_X, BambuBus_data_buf, length);
             BambuBus_have_data = length;
-        }
-        if (_index >= 999) // recv error,reset
-        {
-            _index = 0;
         }
     }
 }
@@ -1041,6 +1058,9 @@ void send_for_long_packge_filament(unsigned char *buf, int length)
     uint8_t filament_num = printer_data_long.datas[1];
     if (AMS_num != BambuBus_AMS_num)
         return;
+    // Bug #1/#22 Fix: Add bounds check for filament_num to prevent buffer overflow
+    if (filament_num >= 4)
+        return;
     long_packge_filament[0] = BambuBus_AMS_num;
     long_packge_filament[1] = filament_num;
     memcpy(long_packge_filament + 19, data_save.filament[filament_num].ID, sizeof(data_save.filament[filament_num].ID));
@@ -1149,6 +1169,9 @@ void send_for_set_filament(unsigned char *buf, int length)
     if (AMS_num != BambuBus_AMS_num)
         return;
     read_num = read_num & 0x0F;
+    // Bug #22 Fix: Add bounds check for read_num to prevent buffer overflow
+    if (read_num >= 4)
+        return;
     memcpy(data_save.filament[read_num].ID, buf + 7, sizeof(data_save.filament[read_num].ID));
     data_save.filament[read_num].color_R = buf[15];
     data_save.filament[read_num].color_G = buf[16];
@@ -1170,6 +1193,9 @@ void send_for_set_filament_type2(unsigned char *buf, int length)
     if (AMS_num != BambuBus_AMS_num)
         return;
     uint8_t read_num = printer_data_long.datas[1];
+    // Bug #22 Fix: Add bounds check for read_num to prevent buffer overflow
+    if (read_num >= 4)
+        return;
     memcpy(data_save.filament[read_num].ID, printer_data_long.datas + 2, sizeof(data_save.filament[read_num].ID));
 
     data_save.filament[read_num].color_R = printer_data_long.datas[10];
