@@ -32,6 +32,7 @@
 
 #define DEBUG_UART_BAUDRATE     115200      ///< Debug UART baud rate
 #define BAMBU_BUS_VERSION       5           ///< BambuBus protocol version
+#define BAMBUBUS_BUFFER_SIZE    1000        ///< BambuBus receive buffer size in bytes
 
 // =============================================================================
 // Firmware Version Configuration

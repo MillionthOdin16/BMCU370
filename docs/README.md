@@ -22,7 +22,7 @@ This directory contains comprehensive technical and user documentation for the B
 
 BMCU-C is the latest generation of the BMCU (Bambu Multi-Color Unit) project, featuring 370 motors and Hall effect sensors for improved reliability and performance.
 
-**Version:** BMCU-C 370 Hall V0.1-0020
+**Version:** BMCU-C 370 Hall V0.1-0021
 **Microcontroller:** CH32V203C8T6 (RISC-V)
 **Framework:** Arduino on PlatformIO
 **License:** GPL 2.0 (Personal use and learning only)
