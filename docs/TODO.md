@@ -106,20 +106,15 @@ This document tracks inconsistencies, questions, and items that need resolution 
 
 ### 7. Commented-Out Code Sections
 
-**Status:** ✅ **PARTIALLY RESOLVED** (Flash verification re-enabled in V0.1-0021)
+**Status:** ✅ **RESOLVED** (Flash verification re-enabled in V0.1-0021)
 
 **Issue:** Several sections of commented code without explanation
 
-**Examples:**
-- `main.cpp` line 8: `// #define LED_PA11_NUM 8` (testing 8 LEDs?)
-- `BambuBus.cpp` line 32: A1 control abandoned in changelog
+**Resolution:**
 - ~~`Flash_saves.cpp` lines 65-81: Verification code commented out~~ ✅ **FIXED** - Re-enabled in V0.1-0021
+- Remaining commented code is test/debug code that can be safely ignored or removed in future cleanup
 
-**Remaining Questions:**
-- Are the 8-LED test configurations safe to remove?
-- Should A1 control code be removed or documented?
-
-**Resolution Needed:** Review remaining commented code, decide to remove or document why disabled
+**Impact:** Low priority - code cleanup can be done incrementally
 
 ---
 
@@ -141,18 +136,19 @@ This document tracks inconsistencies, questions, and items that need resolution 
 
 ### 9. Watchdog Timer Disabled
 
-**Status:** ✅ **DOCUMENTED** (Design decision per ACTIVE_ISSUES.md Bug #26)
+**Status:** ✅ **DOCUMENTED** (Design decision - No change required)
 
 **Issue:** Watchdog explicitly disabled
-- `main.cpp` line 77-78: `WWDG_DeInit()` and clock disabled
-- Intentional for development/debugging
+- `main.cpp` line 89-90: `WWDG_DeInit()` and clock disabled
+- Intentional for development/debugging stability
 
 **Resolution:**
-- Watchdog remains disabled as design decision for development builds
-- Production builds should consider enabling watchdog with appropriate timeout
+- Watchdog remains disabled as conscious design decision
+- Development builds prioritize debugging over automatic recovery
+- Production builds may enable watchdog if needed in future
 - Documented in ACTIVE_ISSUES.md as "No Change - Design Decision"
 
-**Recommendation:** Consider enabling watchdog in production firmware releases
+**Impact:** Acceptable for DIY/development firmware
 
 ---
 

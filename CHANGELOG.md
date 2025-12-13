@@ -8,6 +8,12 @@ This changelog documents the development history of the BMCU-C 370 Hall version 
 
 ## [Unreleased]
 
+### Fixed
+- **Critical Bug: Filament State Management:** Fixed logic error in `set_filament_motion()` where redundant `if` condition prevented proper state flag updates for non-on_use motion states
+  - Filament use flags now correctly updated for all motion states (idle, send_out, pull_back, on_use)
+  - Resolves potential filament loading/unloading failures
+  - Printer now properly recognizes all filament state transitions
+
 ### Improved
 - **LED Color Accuracy:** Applied gamma correction (gamma=2.6) to all RGB LED colors for more accurate color representation
   - Filament colors now display more accurately
@@ -23,7 +29,26 @@ This changelog documents the development history of the BMCU-C 370 Hall version 
 
 ## [V0.1-0021] - 2025-12-13
 
-### Fixed
+### Fixed (Additional Fixes - Commit 1054624)
+- **ISR Race Condition:** Fixed critical race condition by adding `volatile` qualifier to `BambuBus_have_data` variable shared between ISR and main loop
+  - Variable written in ISR (RX_IRQ line 266) and read in main loop (BambuBus_run line 1260)
+  - Compiler may cache value in register without volatile, causing main loop to miss ISR updates
+  - Resolves intermittent light button failures and missed BambuBus commands
+  - Impact: CRITICAL - Prevents lost BambuBus packets and communication failures
+- **Boot Timeout Initialization:** Fixed false offline detection on system boot
+  - Static timers `time_set` and `time_motion` initialized to 0, causing immediate timeout on first check
+  - System reported ERROR/offline status on boot until first heartbeat received
+  - Added `first_run` flag to initialize timeouts to (current_time + 1000ms)
+  - Prevents "AMS offline" message for first 1-2 seconds after power-on
+  - Impact: MEDIUM - Improves user experience on boot
+- **Logical Operator Correction:** Fixed bitwise AND (`&`) incorrectly used instead of logical AND (`&&`) in filament detection
+  - Condition used single `&` (bitwise) instead of `&&` (logical): `if ((raw[i] < 1.7f) & (raw[i] > 1.4f))`
+  - Semantically incorrect, converts booleans to int and performs bitwise AND
+  - May cause unexpected behavior with compiler optimizations
+  - Changed to proper logical AND operator: `if ((raw[i] < 1.7f) && (raw[i] > 1.4f))`
+  - Impact: LOW - Defensive fix preventing future issues
+
+### Fixed (Original V0.1-0021 Fixes)
 - **Bug #27 - CRITICAL: BambuBus Buffer Overflow:** Fixed critical remote buffer overflow vulnerability in UART interrupt handler by checking bounds BEFORE write operation
 - **Bug #22 - CRITICAL: Filament Data Buffer Overflows:** Fixed multiple buffer overflow vulnerabilities in `send_for_set_filament()` and `send_for_set_filament_type2()` by adding bounds checking for external input
 - **Bug #1 - CRITICAL: Array Index Bounds Checking:** Fixed buffer underflow vulnerability in 7 functions by using `(unsigned)num < 4` to check both lower and upper bounds
