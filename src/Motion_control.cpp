@@ -122,8 +122,8 @@ void MC_PULL_ONLINE_read()
             { // 小于则离线.
                 MC_ONLINE_key_stu[i] = 0;
             }
-            else if ((MC_ONLINE_key_stu_raw[i] < 1.7f) & (MC_ONLINE_key_stu_raw[i] > 1.4f))
-            { // 仅触发外侧微动，需辅助进料
+            else if ((MC_ONLINE_key_stu_raw[i] < 1.7f) && (MC_ONLINE_key_stu_raw[i] > 1.4f))
+            { // 仅触发外侧微动，需辅助进料 (fixed: use && not &)
                 MC_ONLINE_key_stu[i] = 2;
             }
             else if (MC_ONLINE_key_stu_raw[i] > 1.7f)
@@ -620,7 +620,7 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
                 }
                 else if (filament_now_position[num] == filament_using) // 已经触发且处于使用中
                 {
-                    last_total_distance[i] = 0; // 重置退料距离
+                    last_total_distance[num] = 0; // 重置退料距离 (使用num保持一致性)
                     if (time_now > time_end)
                     {                                          // 已超1.5秒，进入通道使用 进行续料
                         MC_STU_RGB_set(num, 255, 255, 255); // 白色
@@ -667,10 +667,17 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
 // 根据AMS模拟器的信息，来调度电机
 void motor_motion_run(int error)
 {
-    uint64_t time_now = get_time64();
     static uint64_t time_last = 0;
-    float time_E = time_now - time_last; // 获取时间差（ms）
-    time_E = time_E / 1000;              // 切换到单位s
+    uint64_t time_now;
+    float time_E;
+
+    // Guard against first call with uninitialized time_last
+    // Same pattern as AS5600_distance_updata() to ensure time_E is never invalid
+    do {
+        time_now = get_time64();
+    } while (time_now <= time_last);  // Wait until time advances from initialization or last call
+
+    time_E = (float)(time_now - time_last) / 1000.0f;  // Convert to seconds
     uint16_t device_type = get_now_BambuBus_device_type();
     if (!error) // 正常模式
     {
