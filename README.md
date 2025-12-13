@@ -4,9 +4,11 @@
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Community-orange.svg)](https://platformio.org/)
 [![RISC-V](https://img.shields.io/badge/RISC--V-CH32V203-green.svg)](http://www.wch-ic.com/)
 
-**BMCU Xing-C Modified Version** - Latest firmware for BMCU-C 370 Hall Effect version (V0.1-0020)
+**BMCU Xing-C Modified Version** - Latest firmware for BMCU-C 370 Hall Effect version (V0.1-0021)
 
 🇨🇳 **中文版本在下方 | Chinese version below**
+
+⚠️ **Security Update:** Version 0.1-0021 includes critical security fixes. Please upgrade immediately.
 
 ---
 
@@ -24,7 +26,7 @@ BMCU-C is an open-source, four-channel filament management system for Bambu Lab 
 - 🔌 BambuBus protocol for seamless printer integration
 
 **Version Information:**
-- **Firmware Version:** V0.1-0020 (2025-07-17)
+- **Firmware Version:** V0.1-0021 (2025-12-13) - **Security Update**
 - **Protocol Version:** 5
 - **Microcontroller:** CH32V203C8T6 (RISC-V 32-bit @ 144MHz)
 - **Framework:** Arduino on PlatformIO
@@ -89,7 +91,25 @@ build_flags = -D SYSCLK_FREQ_144MHz_HSI=144000000
 
 ## 🔧 Features
 
-### Latest Updates (V0.1-0020)
+### Latest Updates (V0.1-0021) - Security Release
+
+🔒 **Critical Security Fixes:**
+- Fixed critical remote buffer overflow in BambuBus UART handler
+- Patched multiple buffer overflow vulnerabilities in filament data handling
+- Fixed buffer underflow vulnerability in array index bounds checking
+- Resolved memory leak in AS5600 destructor
+- Re-enabled flash write verification
+
+✅ **Additional Fixes:**
+- Race conditions in motion control
+- DMA error handling
+- CRC failure logging
+- LED array bounds checking
+- Negative meter value validation
+
+📊 **Impact:** 10 security vulnerabilities resolved (5 critical, 1 high, 4 medium/low)
+
+### Previous Updates (V0.1-0020)
 
 ✅ **Fixed Issues:**
 - LED logic errors causing incorrect illumination

@@ -6,6 +6,41 @@ This changelog documents the development history of the BMCU-C 370 Hall version 
 
 ---
 
+## [V0.1-0021] - 2025-12-13
+
+### Fixed
+- **Bug #27 - CRITICAL: BambuBus Buffer Overflow:** Fixed critical remote buffer overflow vulnerability in UART interrupt handler by checking bounds BEFORE write operation
+- **Bug #22 - CRITICAL: Filament Data Buffer Overflows:** Fixed multiple buffer overflow vulnerabilities in `send_for_set_filament()` and `send_for_set_filament_type2()` by adding bounds checking for external input
+- **Bug #1 - CRITICAL: Array Index Bounds Checking:** Fixed buffer underflow vulnerability in 7 functions by using `(unsigned)num < 4` to check both lower and upper bounds
+- **Bug #19: AS5600 Memory Leak:** Fixed memory leak in AS5600 destructor by changing `delete` to `delete[]` for proper array deallocation
+- **Bug #23: Flash Write Verification:** Re-enabled flash write verification to detect silent data corruption
+- **Bug #2: Race Conditions in Motion Control:** Fixed potential race conditions in `MC_PULL_ONLINE_read()` by adding null pointer validation and atomic-like updates
+- **Bug #31: LED Array Bounds Checking:** Fixed buffer overflow potential in `Set_MC_RGB()` by adding channel parameter bounds checking
+- **Bug #3: Negative Meter Value Validation:** Added validation to prevent negative filament meter values in `add_filament_meters()`
+- **Bug #24: DMA Error Handling:** Added DMA transfer error interrupt configuration and flag checking to prevent incorrect ADC readings
+- **Bug #25: CRC Failure Logging:** Added debug logging and error counter for CRC8 validation failures to improve debugging
+
+### Security
+- **10 security vulnerabilities fixed:** 5 critical, 1 high priority, 3 medium priority, 1 low priority
+- All buffer overflow and memory safety issues from ACTIVE_ISSUES.md have been resolved
+- Remote exploit vulnerabilities in BambuBus communication protocol have been patched
+
+### Changed
+- Flash write operations now properly verify written data and return failure status on corruption
+- ADC DMA operations now check for transfer errors before processing data
+- Motion control now uses temporary buffers for atomic-like updates to sensor data
+
+### Technical Details
+- Modified files: `BambuBus.cpp`, `many_soft_AS5600.cpp`, `Flash_saves.cpp`, `Motion_control.cpp`, `main.cpp`, `ADC_DMA.cpp`
+- Build verified successfully with PlatformIO on CH32V203C8T6 platform
+- Memory usage: RAM 46.5% (9532/20480 bytes), Flash 57.8% (37884/65536 bytes)
+
+### Documentation
+- Updated `ACTIVE_ISSUES.md` to mark all 10 resolved bugs as FIXED
+- All critical and high priority security bugs have been addressed
+
+---
+
 ## [V0.1-0020] - 2025-07-17
 
 ### Fixed
