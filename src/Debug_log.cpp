@@ -1,4 +1,5 @@
 #include "Debug_log.h"
+#include "SerialBridge.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -58,6 +59,9 @@ void Debug_log_init()
     Debug_log_DMA_InitStructure.DMA_BufferSize = 0;
 
     USART_Cmd(USART3, ENABLE);
+
+    // Initialize serial bridge
+    SerialBridge_init();
 }
 
 uint64_t Debug_log_count64()
@@ -77,6 +81,13 @@ void Debug_log_write(const void *data)
 }
 
 void Debug_log_write_num(const void *data, int num)
+{
+    // Send as framed debug message
+    SerialBridge_send_debug((const uint8_t *)data, (uint16_t)num);
+}
+
+// Raw DMA send function (used internally by SerialBridge)
+void Debug_log_write_num_raw(const void *data, int num)
 {
     DMA_DeInit(DMA1_Channel2);
     // Configure DMA1 channel 2 for USART3 TX
@@ -119,9 +130,9 @@ void USART3_IRQHandler(void)
 {
     if (USART_GetITStatus(USART3, USART_IT_RXNE) != RESET)
     {
-        // uint8_t x =
-        USART_ReceiveData(USART3);
-        // USART_SendData(USART3, x);
+        uint8_t byte = USART_ReceiveData(USART3);
+        // Forward to serial bridge for frame parsing
+        SerialBridge_rx_byte(byte);
     }
 }
 

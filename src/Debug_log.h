@@ -16,6 +16,7 @@ extern "C"
     extern void Debug_log_time();
     extern void Debug_log_write(const void *data);
     extern void Debug_log_write_num(const void *data, int num);
+    extern void Debug_log_write_num_raw(const void *data, int num);
     extern void Debug_log_write_float(const void *prefix, float value, int precision);
 
 #ifdef Debug_log_on

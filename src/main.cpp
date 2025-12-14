@@ -2,6 +2,7 @@
 #include "main.h"
 
 #include "BambuBus.h"
+#include "SerialBridge.h"
 #include "Adafruit_NeoPixel.h"
 
 extern void debug_send_run();
@@ -233,5 +234,8 @@ void loop()
         {
             Motion_control_run(error);
         }
+
+        // Process serial bridge frames (computer to BambuBus)
+        SerialBridge_process();
     }
 }

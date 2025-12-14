@@ -2,6 +2,7 @@
 #include "CRC16.h"
 #include "CRC8.h"
 #include "config.h"
+#include "SerialBridge.h"
 CRC16 crc_16;
 CRC8 crc_8;
 
@@ -264,6 +265,9 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
             _index = 0;
             memcpy(buf_X, BambuBus_data_buf, length);
             BambuBus_have_data = length;
+
+            // Forward BambuBus packet to computer via serial bridge
+            SerialBridge_send_bambubus(BambuBus_data_buf, length);
         }
     }
 }
