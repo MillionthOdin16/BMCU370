@@ -5,12 +5,11 @@
 CRC16 crc_16;
 CRC8 crc_8;
 
-uint8_t BambuBus_data_buf[BAMBUBUS_BUFFER_SIZE];
-volatile int BambuBus_have_data = 0;  // volatile: written in ISR (RX_IRQ), read in main loop (BambuBus_run)
+uint8_t BambuBus_data_buf[1000];
+int BambuBus_have_data = 0;
 uint16_t BambuBus_address = 0;
-uint8_t BambuBus_AMS_num = 0; // 0~3 代表被识别为 A B C D
-uint32_t BambuBus_CRC_error_count = 0; // Bug #25: Track CRC failures
-uint8_t AMS_humidity_wet = DEFAULT_HUMIDITY_WET; // 0~100(百分比湿度)
+uint8_t BambuBus_AMS_num = 0; // 0-3 represents AMS identification as A, B, C, D
+uint8_t AMS_humidity_wet = DEFAULT_HUMIDITY_WET; // 0~100 (humidity percentage)
 
 /**
  * Filament structure definition
@@ -19,21 +18,23 @@ uint8_t AMS_humidity_wet = DEFAULT_HUMIDITY_WET; // 0~100(百分比湿度)
 struct _filament
 {
     // AMS status information
-    char ID[8] = DEFAULT_FILAMENT_ID;
-    uint8_t color_R = DEFAULT_COLOR_R;
-    uint8_t color_G = DEFAULT_COLOR_G;
-    uint8_t color_B = DEFAULT_COLOR_B;
-    uint8_t color_A = DEFAULT_COLOR_A;
-    int16_t temperature_min = DEFAULT_TEMP_MIN;
-    int16_t temperature_max = DEFAULT_TEMP_MAX;
-    char name[20] = DEFAULT_FILAMENT_NAME;
+    char ID[8] = DEFAULT_FILAMENT_ID;           ///< Filament identification string
+    uint8_t color_R = DEFAULT_COLOR_R;          ///< Red color component
+    uint8_t color_G = DEFAULT_COLOR_G;          ///< Green color component  
+    uint8_t color_B = DEFAULT_COLOR_B;          ///< Blue color component
+    uint8_t color_A = DEFAULT_COLOR_A;          ///< Alpha (transparency) component
+    int16_t temperature_min = DEFAULT_TEMP_MIN; ///< Minimum extrusion temperature
+    int16_t temperature_max = DEFAULT_TEMP_MAX; ///< Maximum extrusion temperature
+    char name[20] = DEFAULT_FILAMENT_NAME;      ///< Filament material name
 
-    float meters = 0;
-    uint64_t meters_virtual_count = 0;
-    AMS_filament_stu statu = AMS_filament_stu::online;
-    // printer_set
-    AMS_filament_motion motion_set = AMS_filament_motion::idle;
-    uint16_t pressure = 0xFFFF;
+    // Measurement and status
+    float meters = 0;                           ///< Remaining filament length in meters
+    uint64_t meters_virtual_count = 0;          ///< Virtual meter counter for tracking
+    AMS_filament_stu statu = AMS_filament_stu::online; ///< Current filament status
+    
+    // Motion control
+    AMS_filament_motion motion_set = AMS_filament_motion::idle; ///< Motion command
+    uint16_t pressure = 0xFFFF;                 ///< Pressure sensor reading
 };
 
 /**
@@ -42,11 +43,11 @@ struct _filament
  */
 struct alignas(4) flash_save_struct
 {
-    _filament filament[MAX_FILAMENT_CHANNELS];
-    int BambuBus_now_filament_num = 0xFF;
-    uint8_t filament_use_flag = 0x00;
-    uint32_t version = Bambubus_version;
-    uint32_t check = FLASH_MAGIC_NUMBER;
+    _filament filament[MAX_FILAMENT_CHANNELS];  ///< Filament data for all channels
+    int BambuBus_now_filament_num = 0xFF;       ///< Currently active filament number
+    uint8_t filament_use_flag = 0x00;           ///< Filament usage flags
+    uint32_t version = BAMBU_BUS_VERSION;       ///< Data structure version
+    uint32_t check = FLASH_MAGIC_NUMBER;        ///< Magic number for data validation
 } data_save;
 
 /**
@@ -56,7 +57,8 @@ struct alignas(4) flash_save_struct
 bool Bambubus_read()
 {
     const flash_save_struct *ptr = (const flash_save_struct *)(FLASH_SAVE_ADDRESS);
-    if ((ptr->check == FLASH_MAGIC_NUMBER) && (ptr->version == Bambubus_version))
+    
+    if ((ptr->check == FLASH_MAGIC_NUMBER) && (ptr->version == BAMBU_BUS_VERSION))
     {
         memcpy(&data_save, ptr, sizeof(data_save));
         return true;
@@ -84,15 +86,12 @@ uint16_t get_now_BambuBus_device_type()
 
 void reset_filament_meters(int num)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
         data_save.filament[num].meters = 0;
 }
 void add_filament_meters(int num, float meters)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    // Bug #3 Fix: Check that meters is non-negative
-    if ((unsigned)num < 4 && meters >= 0.0f)
+    if (num < 4)
     {
         if ((data_save.filament[num].motion_set == AMS_filament_motion::on_use) || (data_save.filament[num].motion_set == AMS_filament_motion::need_pull_back))
             data_save.filament[num].meters += meters;
@@ -100,16 +99,14 @@ void add_filament_meters(int num, float meters)
 }
 float get_filament_meters(int num)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
         return data_save.filament[num].meters;
     else
         return 0;
 }
 void set_filament_online(int num, bool if_online)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
     {
         if (if_online)
         {
@@ -128,8 +125,7 @@ void set_filament_online(int num, bool if_online)
 
 bool get_filament_online(int num)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
     {
         if (data_save.filament[num].statu == AMS_filament_stu::offline)
         {
@@ -147,34 +143,32 @@ bool get_filament_online(int num)
 }
 void set_filament_motion(int num, AMS_filament_motion motion)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
     {
         _filament *filament = &(data_save.filament[num]);
         filament->motion_set = motion;
-        // Set filament use flag based on motion state
-        switch (motion)
-        {
-        case AMS_filament_motion::on_use:
-        case AMS_filament_motion::before_pull_back:
-            data_save.filament_use_flag = 0x04;
-            break;
-        case AMS_filament_motion::need_send_out:
-            data_save.filament_use_flag = 0x02;
-            break;
-        case AMS_filament_motion::need_pull_back:
-            data_save.filament_use_flag = 0x00;
-            break;
-        case AMS_filament_motion::idle:
-            data_save.filament_use_flag = 0x00;
-            break;
-        }
+        if (motion == AMS_filament_motion::on_use)
+            switch (motion)
+            {
+            case AMS_filament_motion::on_use:
+            case AMS_filament_motion::before_pull_back:
+                data_save.filament_use_flag = 0x04;
+                break;
+            case AMS_filament_motion::need_send_out:
+                data_save.filament_use_flag = 0x02;
+                break;
+            case AMS_filament_motion::need_pull_back:
+                data_save.filament_use_flag = 0x00;
+                break;
+            case AMS_filament_motion::idle:
+                data_save.filament_use_flag = 0x00;
+                break;
+            }
     }
 }
 AMS_filament_motion get_filament_motion(int num)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
         return data_save.filament[num].motion_set;
     else
         return AMS_filament_motion::idle;
@@ -216,12 +210,6 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
     }
     else // have 0x3D,normal data
     {
-        // Bug #27 Fix: Check bounds BEFORE write to prevent buffer overflow
-        if (_index >= 1000)
-        {
-            _index = 0;
-            return;
-        }
         BambuBus_data_buf[_index] = data;
         if (_index == 1) // package type byte
         {
@@ -248,12 +236,6 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
         {
             if (data != _RX_IRQ_crcx.calc()) // check error,return to waiting 0x3D
             {
-                // Bug #25 Fix: Add debug logging for CRC failures
-                BambuBus_CRC_error_count++;
-#ifdef Debug_log_on
-                DEBUG_MY("BambuBus CRC8 error, count: ");
-                DEBUG_num(&BambuBus_CRC_error_count, sizeof(BambuBus_CRC_error_count));
-#endif
                 _index = 0;
                 return;
             }
@@ -264,6 +246,10 @@ void inline RX_IRQ(unsigned char _RX_IRQ_data)
             _index = 0;
             memcpy(buf_X, BambuBus_data_buf, length);
             BambuBus_have_data = length;
+        }
+        if (_index >= 999) // recv error,reset
+        {
+            _index = 0;
         }
     }
 }
@@ -369,6 +355,8 @@ void BambuBus_init()
             channel_colors[i][2] = data_save.filament[i].color_B;
             channel_colors[i][3] = data_save.filament[i].color_A;
         }
+        // Preserve channel selection when valid data is loaded from flash
+        // Only reset filament states but keep the selected channel
     }
     else
     {
@@ -384,6 +372,9 @@ void BambuBus_init()
         data_save.filament[3].color_R = 0x88;
         data_save.filament[3].color_G = 0x88;
         data_save.filament[3].color_B = 0x88;
+        
+        // Only reset channel selection when no valid data is available
+        data_save.BambuBus_now_filament_num = 0xFF;
     }
     for (auto &j : data_save.filament)
     {
@@ -396,7 +387,6 @@ void BambuBus_init()
         j.motion_set = AMS_filament_motion::idle;
         j.meters = 0;
     }
-    data_save.BambuBus_now_filament_num = 0xFF;
 
     BambuBUS_UART_Init();
 }
@@ -596,16 +586,13 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
     time_last = time_now;
     if (BambuBus_address == BambuBus_AMS) // AMS08
     {
-        // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-        if ((unsigned)read_num < 4)
+        if (read_num < 4)
         {
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x00)) // 03 00
             {
                 if (data_save.BambuBus_now_filament_num != read_num) // on change
                 {
-                    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-                    // This also rejects 0xFF (no filament selected) and any negative values
-                    if ((unsigned)data_save.BambuBus_now_filament_num < 4)
+                    if (data_save.BambuBus_now_filament_num < 4)
                     {
                         data_save.filament[data_save.BambuBus_now_filament_num].motion_set = AMS_filament_motion::idle;
                         data_save.filament_use_flag = 0x00;
@@ -643,11 +630,9 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
         {
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x00)) // 03 00(FF)
             {
-                // Bug #1 Fix: Check bounds BEFORE taking pointer to prevent buffer overflow
-                // This also rejects 0xFF (no filament selected) and any negative values
-                if ((unsigned)data_save.BambuBus_now_filament_num < 4)
+                _filament *filament = &(data_save.filament[data_save.BambuBus_now_filament_num]);
+                if (data_save.BambuBus_now_filament_num < 4)
                 {
-                    _filament *filament = &(data_save.filament[data_save.BambuBus_now_filament_num]);
                     if (filament->motion_set == AMS_filament_motion::on_use)
                     {
                         filament->motion_set = AMS_filament_motion::need_pull_back;
@@ -668,8 +653,7 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
     }
     else if (BambuBus_address == BambuBus_AMS_lite) // AMS lite
     {
-        // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-        if ((unsigned)read_num < 4)
+        if (read_num < 4)
         {
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x3F)) // 03 3F
             {
@@ -710,12 +694,11 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
                 {
                     data_save.filament_use_flag = 0x04;
                 }
-                // Enable explicit retraction stop: when printer sends 07 00 during retraction, stop immediately
-                if (data_save.filament[read_num].motion_set == AMS_filament_motion::need_pull_back)
+                /*if (data_save.filament[read_num].motion_set == need_pull_back)
                 {
-                    data_save.filament[read_num].motion_set = AMS_filament_motion::idle;
+                    data_save.filament[read_num].motion_set = idle;
                     data_save.filament_use_flag = 0x00;
-                }
+                }*/
             }
             else if ((statu_flags == 0x07) && (fliment_motion_flag == 0x66)) // 07 66 printer ready return back filament
             {
@@ -728,19 +711,14 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
         }
         else if ((read_num == 0xFF) && (statu_flags == 0x01))
         {
-            // Bug #1 Fix: Check bounds before accessing filament array
-            // This also rejects 0xFF (no filament selected) and any negative values
-            if ((unsigned)data_save.BambuBus_now_filament_num < 4)
+            AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
+            if (motion != AMS_filament_motion::on_use)
             {
-                AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
-                if (motion != AMS_filament_motion::on_use)
+                for (int i = 0; i < 4; i++)
                 {
-                    for (int i = 0; i < 4; i++)
-                    {
-                        data_save.filament[i].motion_set = AMS_filament_motion::idle;
-                    }
-                    data_save.filament_use_flag = 0x00;
+                    data_save.filament[i].motion_set = AMS_filament_motion::idle;
                 }
+                data_save.filament_use_flag = 0x00;
             }
         }
     }
@@ -977,10 +955,10 @@ void send_for_online_detect(unsigned char *buf, int length)
     {
         if (have_registered == true)
             return;
-        // Reduced delay for AMS packet sequencing: 100µs per unit instead of 1ms
-        // This provides timing separation while maintaining responsiveness
-        if (BambuBus_AMS_num > 0) {
-            delayMicroseconds(100 * BambuBus_AMS_num);
+        int i = BambuBus_AMS_num;
+        while (i--)
+        {
+            delay(1); // 将不同序号的AMS数据包上分割开来
         }
         online_detect_res[0] = 0x3D;             // 帧头
         online_detect_res[1] = 0xC0;             // flag
@@ -1081,9 +1059,6 @@ void send_for_long_packge_filament(unsigned char *buf, int length)
     uint8_t filament_num = printer_data_long.datas[1];
     if (AMS_num != BambuBus_AMS_num)
         return;
-    // Bug #1/#22 Fix: Add bounds check for filament_num to prevent buffer overflow
-    if (filament_num >= 4)
-        return;
     long_packge_filament[0] = BambuBus_AMS_num;
     long_packge_filament[1] = filament_num;
     memcpy(long_packge_filament + 19, data_save.filament[filament_num].ID, sizeof(data_save.filament[filament_num].ID));
@@ -1145,10 +1120,25 @@ void send_for_long_packge_serial_number(unsigned char *buf, int length)
     Bambubus_long_package_send(&data);
 }
 
-unsigned char long_packge_version_version_and_name_AMS_lite[] = {0x03, 0x02, 0x01, 0x00, // version number (00.01.02.03)
-                                                                 0x41, 0x4D, 0x53, 0x5F, 0x46, 0x31, 0x30, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // AMS_F102 hw code name 
-unsigned char long_packge_version_version_and_name_AMS08[] = {0x31, 0x06, 0x00, 0x00, // version number (00.00.06.49)
-                                                              0x41, 0x4D, 0x53, 0x30, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+// AMS Lite firmware version and hardware name - configurable via config.h
+unsigned char long_packge_version_version_and_name_AMS_lite[] = {
+    AMS_LITE_FIRMWARE_VERSION_BUILD,  // Build version (LSB)
+    AMS_LITE_FIRMWARE_VERSION_PATCH,  // Patch version  
+    AMS_LITE_FIRMWARE_VERSION_MINOR,  // Minor version
+    AMS_LITE_FIRMWARE_VERSION_MAJOR,  // Major version (MSB)
+    // Hardware identifier: "AMS_F102"
+    0x41, 0x4D, 0x53, 0x5F, 0x46, 0x31, 0x30, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+// AMS (8-channel) firmware version and hardware name - configurable via config.h  
+unsigned char long_packge_version_version_and_name_AMS08[] = {
+    AMS_FIRMWARE_VERSION_BUILD,       // Build version (LSB)
+    AMS_FIRMWARE_VERSION_PATCH,       // Patch version
+    AMS_FIRMWARE_VERSION_MINOR,       // Minor version
+    AMS_FIRMWARE_VERSION_MAJOR,       // Major version (MSB)
+    // Hardware identifier: "AMS08"
+    0x41, 0x4D, 0x53, 0x30, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
 
 void send_for_long_packge_version(unsigned char *buf, int length)
 {
@@ -1192,9 +1182,6 @@ void send_for_set_filament(unsigned char *buf, int length)
     if (AMS_num != BambuBus_AMS_num)
         return;
     read_num = read_num & 0x0F;
-    // Bug #22 Fix: Add bounds check for read_num to prevent buffer overflow
-    if (read_num >= 4)
-        return;
     memcpy(data_save.filament[read_num].ID, buf + 7, sizeof(data_save.filament[read_num].ID));
     data_save.filament[read_num].color_R = buf[15];
     data_save.filament[read_num].color_G = buf[16];
@@ -1216,9 +1203,6 @@ void send_for_set_filament_type2(unsigned char *buf, int length)
     if (AMS_num != BambuBus_AMS_num)
         return;
     uint8_t read_num = printer_data_long.datas[1];
-    // Bug #22 Fix: Add bounds check for read_num to prevent buffer overflow
-    if (read_num >= 4)
-        return;
     memcpy(data_save.filament[read_num].ID, printer_data_long.datas + 2, sizeof(data_save.filament[read_num].ID));
 
     data_save.filament[read_num].color_R = printer_data_long.datas[10];
@@ -1250,16 +1234,8 @@ BambuBus_package_type BambuBus_run()
     BambuBus_package_type stu = BambuBus_package_type::NONE;
     static uint64_t time_set = 0;
     static uint64_t time_motion = 0;
-    static bool first_run = true;
 
     uint64_t timex = get_time64();
-
-    // Initialize timeouts on first run to prevent false offline detection
-    if (first_run) {
-        time_set = timex + 1000;
-        time_motion = timex + 1000;
-        first_run = false;
-    }
 
     /*for (auto i : data_save.filament)
     {
@@ -1271,7 +1247,7 @@ BambuBus_package_type BambuBus_run()
         int data_length = BambuBus_have_data;
         BambuBus_have_data = 0;
         need_debug = false;
-        // Removed delay(1) - unnecessary delay that reduces packet processing rate
+        delay(1);
         stu = get_packge_type(buf_X, data_length); // have_data
         switch (stu)
         {
