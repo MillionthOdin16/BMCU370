@@ -976,10 +976,10 @@ void send_for_online_detect(unsigned char *buf, int length)
     {
         if (have_registered == true)
             return;
-        int i = BambuBus_AMS_num;
-        while (i--)
-        {
-            delay(1); // 将不同序号的AMS数据包上分割开来
+        // Reduced delay for AMS packet sequencing: 100µs per unit instead of 1ms
+        // This provides timing separation while maintaining responsiveness
+        if (BambuBus_AMS_num > 0) {
+            delayMicroseconds(100 * BambuBus_AMS_num);
         }
         online_detect_res[0] = 0x3D;             // 帧头
         online_detect_res[1] = 0xC0;             // flag
@@ -1270,7 +1270,7 @@ BambuBus_package_type BambuBus_run()
         int data_length = BambuBus_have_data;
         BambuBus_have_data = 0;
         need_debug = false;
-        delay(1);
+        // Removed delay(1) - unnecessary delay that reduces packet processing rate
         stu = get_packge_type(buf_X, data_length); // have_data
         switch (stu)
         {

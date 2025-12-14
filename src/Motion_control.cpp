@@ -489,14 +489,14 @@ void Motion_control_set_PWM(uint8_t CHx, int PWM)//传递到硬件层控制电�
 int32_t as5600_distance_save[4] = {0, 0, 0, 0};
 void AS5600_distance_updata()//读取as5600，更新相关的数据
 {
+    uint64_t time_now = get_time64();
     static uint64_t time_last = 0;
-    uint64_t time_now;
-    float T;
-    do
-    {
-        time_now = get_time64();
-    } while (time_now <= time_last); // T!=0
-    T = (float)(time_now - time_last);
+    float T = time_now - time_last;
+
+    // Skip update if called too rapidly (prevents redundant sensor reads)
+    if (T == 0) {
+        return;
+    }
     MC_AS5600.updata_angle();
     for (int i = 0; i < 4; i++)
     {
@@ -668,17 +668,10 @@ void motor_motion_switch() // 通道状态切换函数，只控制当前在使�
 // 根据AMS模拟器的信息，来调度电机
 void motor_motion_run(int error)
 {
+    uint64_t time_now = get_time64();
     static uint64_t time_last = 0;
-    uint64_t time_now;
-    float time_E;
-
-    // Guard against first call with uninitialized time_last
-    // Same pattern as AS5600_distance_updata() to ensure time_E is never invalid
-    do {
-        time_now = get_time64();
-    } while (time_now <= time_last);  // Wait until time advances from initialization or last call
-
-    time_E = (float)(time_now - time_last) / 1000.0f;  // Convert to seconds
+    float time_E = time_now - time_last; // 获取时间差（ms）
+    time_E = time_E / 1000;              // 切换到单位s
     uint16_t device_type = get_now_BambuBus_device_type();
     if (!error) // 正常模式
     {
