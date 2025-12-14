@@ -710,11 +710,12 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
                 {
                     data_save.filament_use_flag = 0x04;
                 }
-                /*if (data_save.filament[read_num].motion_set == need_pull_back)
+                // Enable explicit retraction stop: when printer sends 07 00 during retraction, stop immediately
+                if (data_save.filament[read_num].motion_set == AMS_filament_motion::need_pull_back)
                 {
-                    data_save.filament[read_num].motion_set = idle;
+                    data_save.filament[read_num].motion_set = AMS_filament_motion::idle;
                     data_save.filament_use_flag = 0x00;
-                }*/
+                }
             }
             else if ((statu_flags == 0x07) && (fliment_motion_flag == 0x66)) // 07 66 printer ready return back filament
             {
