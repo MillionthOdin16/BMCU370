@@ -489,14 +489,14 @@ void Motion_control_set_PWM(uint8_t CHx, int PWM)//传递到硬件层控制电�
 int32_t as5600_distance_save[4] = {0, 0, 0, 0};
 void AS5600_distance_updata()//读取as5600，更新相关的数据
 {
-    uint64_t time_now = get_time64();
     static uint64_t time_last = 0;
-    float T = time_now - time_last;
-
-    // Skip update if called too rapidly (prevents redundant sensor reads)
-    if (T == 0) {
-        return;
-    }
+    uint64_t time_now;
+    float T;
+    do
+    {
+        time_now = get_time64();
+    } while (time_now <= time_last); // T!=0
+    T = (float)(time_now - time_last);
     MC_AS5600.updata_angle();
     for (int i = 0; i < 4; i++)
     {
