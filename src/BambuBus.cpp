@@ -710,12 +710,11 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
                 {
                     data_save.filament_use_flag = 0x04;
                 }
-                // Enable explicit retraction stop: when printer sends 07 00 during retraction, stop immediately
-                if (data_save.filament[read_num].motion_set == AMS_filament_motion::need_pull_back)
+                /*if (data_save.filament[read_num].motion_set == AMS_filament_motion::need_pull_back)
                 {
                     data_save.filament[read_num].motion_set = AMS_filament_motion::idle;
                     data_save.filament_use_flag = 0x00;
-                }
+                }*/
             }
             else if ((statu_flags == 0x07) && (fliment_motion_flag == 0x66)) // 07 66 printer ready return back filament
             {
@@ -1271,7 +1270,7 @@ BambuBus_package_type BambuBus_run()
         int data_length = BambuBus_have_data;
         BambuBus_have_data = 0;
         need_debug = false;
-        // Removed delay(1) - unnecessary delay that reduces packet processing rate
+        delay(1);
         stu = get_packge_type(buf_X, data_length); // have_data
         switch (stu)
         {
