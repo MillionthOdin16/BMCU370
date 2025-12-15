@@ -147,24 +147,32 @@ bool get_filament_online(int num)
 }
 void set_filament_motion(int num, AMS_filament_motion motion)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
     {
         _filament *filament = &(data_save.filament[num]);
         filament->motion_set = motion;
-        // Only update filament_use_flag when transitioning to on_use state
-        // The BambuBus command handler (set_motion) manages the flag for other states
-        // This matches the working BMCU370t firmware behavior
         if (motion == AMS_filament_motion::on_use)
-        {
-            data_save.filament_use_flag = 0x04;
-        }
+            switch (motion)
+            {
+            case AMS_filament_motion::on_use:
+            case AMS_filament_motion::before_pull_back:
+                data_save.filament_use_flag = 0x04;
+                break;
+            case AMS_filament_motion::need_send_out:
+                data_save.filament_use_flag = 0x02;
+                break;
+            case AMS_filament_motion::need_pull_back:
+                data_save.filament_use_flag = 0x00;
+                break;
+            case AMS_filament_motion::idle:
+                data_save.filament_use_flag = 0x00;
+                break;
+            }
     }
 }
 AMS_filament_motion get_filament_motion(int num)
 {
-    // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-    if ((unsigned)num < 4)
+    if (num < 4)
         return data_save.filament[num].motion_set;
     else
         return AMS_filament_motion::idle;
@@ -662,8 +670,7 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
     }
     else if (BambuBus_address == BambuBus_AMS_lite) // AMS lite
     {
-        // Bug #1 Fix: Check both lower and upper bounds to prevent buffer underflow/overflow
-        if ((unsigned)read_num < 4)
+        if (read_num < 4)
         {
             if ((statu_flags == 0x03) && (fliment_motion_flag == 0x3F)) // 03 3F
             {
@@ -721,28 +728,16 @@ bool set_motion(unsigned char read_num, unsigned char statu_flags, unsigned char
         }
         else if ((read_num == 0xFF) && (statu_flags == 0x01))
         {
-            // AMS Lite stop signal: Set all filaments to idle
-            // Note: The bounds check on BambuBus_now_filament_num was removed because:
-            // 1. The stop signal (0xFF 0x01) should ALWAYS set all filaments to idle
-            // 2. The previous bounds check caused the stop handler to be skipped when
-            //    BambuBus_now_filament_num was 0xFF, resulting in retraction not stopping
-            // 3. The motion check below only reads from the array if we need to verify
-            //    we're not in on_use state, but we can safely check bounds just for that read
-            if ((unsigned)data_save.BambuBus_now_filament_num < 4)
+            // AMS Lite stop signal - matches working BMCU370t exactly
+            AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
+            if (motion != AMS_filament_motion::on_use)
             {
-                AMS_filament_motion motion = data_save.filament[data_save.BambuBus_now_filament_num].motion_set;
-                if (motion == AMS_filament_motion::on_use)
+                for (int i = 0; i < 4; i++)
                 {
-                    // Don't stop if actively in use (printing)
-                    return true;
+                    data_save.filament[i].motion_set = AMS_filament_motion::idle;
                 }
+                data_save.filament_use_flag = 0x00;
             }
-            // Always set all filaments to idle when stop signal received (unless in use)
-            for (int i = 0; i < 4; i++)
-            {
-                data_save.filament[i].motion_set = AMS_filament_motion::idle;
-            }
-            data_save.filament_use_flag = 0x00;
         }
     }
     else if (BambuBus_address == BambuBus_none) // none
